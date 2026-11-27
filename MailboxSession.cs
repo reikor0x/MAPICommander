@@ -1,12 +1,13 @@
 internal sealed class MailboxSession
 {
-    internal sealed record Target(byte[] StoreId, byte[]? FolderId);
+    internal sealed record Target(byte[] StoreId, byte[]? FolderId, Target? Parent = null);
     internal sealed record Row(long Received, byte[] Id);
 
     private readonly TaskCompletionSource<Control> _dispatcher = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _stopped = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private MapiRuntime? _runtime;
     private MapiObject? _session;
+    private readonly Dictionary<byte[], MapiObject> _browseStores = new(ReferenceEqualityComparer.Instance);
     private bool _online;
 
     public MailboxSession()
@@ -71,15 +72,16 @@ internal sealed class MailboxSession
 
     public Task<List<Mapi.NamedEntry>> ChildrenAsync(Target target, CancellationToken token) => InvokeAsync(() =>
     {
-        using var store = OpenStore(target, write: false);
-        using var folder = Mapi.OpenFolder(store, target.FolderId ?? Mapi.GetMailRootId(store), write: false);
+        var store = GetBrowseStore(target);
+        using var folder = OpenTargetFolder(store, target, write: false, token);
         return Mapi.GetChildren(folder, token);
     });
 
     public Task<List<Row>> PreviewAsync(Target target, long? from, long before, Action<long> progress, CancellationToken token) => InvokeAsync(() =>
     {
-        using var store = OpenStore(target, write: false);
-        using var folder = OpenTargetFolder(store, target, write: false);
+        var store = GetBrowseStore(target);
+        using var folder = OpenTargetFolder(store, target, write: false, token);
+        Mapi.EnsureNormalFolder(folder);
         var rows = new List<Row>();
         Mapi.Scan(folder, from, before, (received, id) => rows.Add(new Row(received, id)), token, progress);
         return rows;
@@ -88,8 +90,10 @@ internal sealed class MailboxSession
     public Task<int> RemoveAsync(Target target, IReadOnlyList<Row> rows, bool hard, Action<long> progress, CancellationToken token) => InvokeAsync(() =>
     {
         token.ThrowIfCancellationRequested();
+        if (_browseStores.Remove(target.StoreId, out var browseStore)) browseStore.Dispose();
         using var store = OpenStore(target, write: true);
-        using var source = OpenTargetFolder(store, target, write: true);
+        using var source = OpenTargetFolder(store, target, write: true, token);
+        Mapi.EnsureNormalFolder(source);
         using var destination = hard ? null : Mapi.OpenTrash(store, source);
         var batch = new byte[Math.Min(rows.Count, Mapi.MutationBatchSize)][];
         for (var offset = 0; offset < rows.Count;)
@@ -109,11 +113,45 @@ internal sealed class MailboxSession
     private MapiObject OpenStore(Target target, bool write) => Mapi.OpenStore(
         _session ?? throw new InvalidOperationException("Connect to an Outlook profile first."), target.StoreId, write, _online);
 
-    private static MapiObject OpenTargetFolder(MapiObject store, Target target, bool write) =>
-        Mapi.OpenNormalFolder(store, target.FolderId ?? throw new InvalidOperationException("Select a mail folder first."), write);
+    private MapiObject GetBrowseStore(Target target)
+    {
+        if (!_browseStores.TryGetValue(target.StoreId, out var store))
+        {
+            store = OpenStore(target, write: false);
+            _browseStores.Add(target.StoreId, store);
+        }
+        return store;
+    }
+
+    private static MapiObject OpenTargetFolder(MapiObject store, Target target, bool write, CancellationToken token)
+    {
+        var path = new Stack<byte[]>();
+        for (var node = target; node.FolderId is { } id; node = node.Parent ?? throw new InvalidOperationException("Folder has no parent in the current mailbox tree."))
+            path.Push(id);
+        token.ThrowIfCancellationRequested();
+        var folder = Mapi.OpenMailRoot(store, write && path.Count == 0);
+        try
+        {
+            while (path.TryPop(out var id))
+            {
+                token.ThrowIfCancellationRequested();
+                var next = Mapi.OpenChildFolder(store, folder, id, write && path.Count == 0);
+                folder.Dispose();
+                folder = next;
+            }
+            return folder;
+        }
+        catch
+        {
+            folder.Dispose();
+            throw;
+        }
+    }
 
     private void Disconnect()
     {
+        foreach (var store in _browseStores.Values) store.Dispose();
+        _browseStores.Clear();
         _session?.Dispose();
         _session = null;
         _runtime?.Dispose();

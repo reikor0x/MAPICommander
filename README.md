@@ -1,4 +1,4 @@
-# MAPICommander 0.7.2 Beta
+# MAPICommander 0.7.3 Beta
 
 MAPICommander is a Windows tool for counting, listing, and removing email from a single Exchange mailbox folder. The same executable provides a desktop mailbox browser and a command-line interface. Both use the existing classic Outlook profile through Extended MAPI, not EWS, and do not require an Entra app registration.
 
@@ -25,6 +25,8 @@ The status bar shows scan and deletion progress. Cancellation is checked between
 If an older build reports `IMAPISession::GetMsgStoresTable` with HRESULT `0x80040103` after logon, update to 0.7.1 Beta or later. The error indicates that the provider rejected the Unicode table flag, not that the profile name was incorrect. If logon succeeds but no stores appear, verify that classic Outlook opens a mailbox with the same profile and that any delegated mailbox is mounted in it.
 
 If 0.7.1 Beta reports `IMsgStore::OpenEntry` with HRESULT `0x80040106` when expanding a mailbox, update to 0.7.2 Beta or later. This error was caused by an incorrect native MAPI method binding, not by the **Online** option.
+
+If an older build reports `0x80040107` when opening or previewing a subfolder, try 0.7.3 Beta or later. It reuses the browsing store and retries the exact folder EntryID through its parent if the store rejects it. It does not switch from online to cached mode or choose a folder by name. If both calls fail, the dialog reports both MAPI results.
 
 ## Command-line quick start
 

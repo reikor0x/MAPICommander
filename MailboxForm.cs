@@ -75,7 +75,7 @@ internal sealed class MailboxForm : Form
                 var children = await _session.ChildrenAsync(target, token);
                 node.Nodes.Clear();
                 foreach (var child in children)
-                    node.Nodes.Add(CreateNode(child.Name, new MailboxSession.Target(target.StoreId, child.Id)));
+                    node.Nodes.Add(CreateNode(child.Name, new MailboxSession.Target(target.StoreId, child.Id, target)));
                 node.Expand();
                 _status.Text = $"{children.Count:N0} subfolders in {node.Text}.";
             });

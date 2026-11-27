@@ -1,7 +1,10 @@
 using System.Runtime.InteropServices;
 
-internal sealed class MapiException(string operation, int result)
-    : Exception($"{operation}: MAPI HRESULT 0x{result:X8}.");
+internal sealed class MapiException(string operation, int result, Exception? inner = null)
+    : Exception($"{operation}: MAPI HRESULT 0x{result:X8}.", inner)
+{
+    public int Result { get; } = result;
+}
 
 internal sealed unsafe class MapiObject : IDisposable
 {
@@ -82,6 +85,8 @@ internal static unsafe class Mapi
     // Vtable slots follow Microsoft's MAPIX.h and MAPIDefS.h, including inherited methods.
     private const int MsgStoreFirstSlot = 3 + 11; // IUnknown + IMAPIProp; IMsgStore starts with Advise and Unadvise.
     private const int StoreCompareEntryIds = MsgStoreFirstSlot + 2, StoreOpenEntry = MsgStoreFirstSlot + 3;
+    private const int ContainerOpenEntry = 16;
+    private const int InvalidEntryId = unchecked((int)0x80040107);
     private const int GetProfileTable = 4, GetMsgStoresTable = 4, OpenMsgStore = 5, GetProps = 5,
         GetContentsTable = 14, GetHierarchyTable = 15, CopyMessages = 20, DeleteMessages = 21,
         SetColumns = 7, Restrict = 14, QueryRows = 19;
@@ -141,25 +146,18 @@ internal static unsafe class Mapi
     internal static MapiObject ResolveFolder(MapiObject store, string? path, bool write, CancellationToken cancellation)
     {
         var segments = path?.Split('\\') ?? [];
-        var id = GetMailRootId(store);
-        foreach (var name in segments)
-        {
-            using var parent = OpenFolder(store, id, false);
-            id = FindUnique(GetChildren(parent, cancellation), name, "Cartella", "Usa folders sulla cartella padre.").Id;
-        }
-
-        return segments.Length == 0 ? OpenFolder(store, id, write) : OpenNormalFolder(store, id, write);
-    }
-
-    internal static byte[] GetMailRootId(MapiObject store) => ReadBinaryProperty(store, IpmSubtree, "PR_IPM_SUBTREE_ENTRYID");
-
-    internal static MapiObject OpenNormalFolder(MapiObject store, byte[] id, bool write)
-    {
-        var folder = OpenFolder(store, id, write);
+        var folder = OpenMailRoot(store, write && segments.Length == 0);
         try
         {
-            if (ReadProperty(folder, FolderType, "PR_FOLDER_TYPE", p => p->Value.Number) != FolderGeneric)
-                throw new InvalidOperationException("Il percorso non identifica una cartella normale (escluse le cartelle di ricerca).");
+            for (var i = 0; i < segments.Length; i++)
+            {
+                var child = FindUnique(GetChildren(folder, cancellation), segments[i], "Cartella", "Usa folders sulla cartella padre.");
+                var next = OpenChildFolder(store, folder, child.Id, write && i == segments.Length - 1);
+                folder.Dispose();
+                folder = next;
+            }
+
+            if (segments.Length != 0) EnsureNormalFolder(folder);
             return folder;
         }
         catch
@@ -167,6 +165,15 @@ internal static unsafe class Mapi
             folder.Dispose();
             throw;
         }
+    }
+
+    internal static MapiObject OpenMailRoot(MapiObject store, bool write = false) =>
+        OpenFolder(store, ReadBinaryProperty(store, IpmSubtree, "PR_IPM_SUBTREE_ENTRYID"), write);
+
+    internal static void EnsureNormalFolder(MapiObject folder)
+    {
+        if (ReadProperty(folder, FolderType, "PR_FOLDER_TYPE", p => p->Value.Number) != FolderGeneric)
+            throw new InvalidOperationException("Il percorso non identifica una cartella normale (escluse le cartelle di ricerca).");
     }
 
     internal static List<NamedEntry> GetChildren(MapiObject folder, CancellationToken cancellation)
@@ -279,13 +286,36 @@ internal static unsafe class Mapi
         }
     }
 
-    internal static MapiObject OpenFolder(MapiObject store, byte[] entryId, bool write)
+    private static MapiObject OpenFolder(MapiObject store, byte[] entryId, bool write) =>
+        OpenFolderEntry(store, StoreOpenEntry, "IMsgStore::OpenEntry", entryId, write);
+
+    internal static MapiObject OpenChildFolder(MapiObject store, MapiObject parent, byte[] entryId, bool write)
+    {
+        try
+        {
+            return OpenFolder(store, entryId, write);
+        }
+        catch (MapiException e) when (e.Result == InvalidEntryId)
+        {
+            return OpenFolderEntry(parent, ContainerOpenEntry, "IMAPIContainer::OpenEntry (parent folder)", entryId, write, e);
+        }
+    }
+
+    private static MapiObject OpenFolderEntry(MapiObject container, int slot, string operation, byte[] entryId, bool write,
+        MapiException? previous = null)
     {
         uint type = 0;
         nint folder = 0;
-        var call = (delegate* unmanaged[Stdcall]<nint, uint, byte*, void*, uint, uint*, nint*, int>)store.Method(StoreOpenEntry);
+        var call = (delegate* unmanaged[Stdcall]<nint, uint, byte*, void*, uint, uint*, nint*, int>)container.Method(slot);
+        int resultCode;
         fixed (byte* id = entryId)
-            Check(call(store.Pointer, (uint)entryId.Length, id, null, write ? MapiModify : 0, &type, &folder), "IMsgStore::OpenEntry");
+            resultCode = call(container.Pointer, (uint)entryId.Length, id, null, write ? MapiModify : 0, &type, &folder);
+        if (resultCode != 0)
+        {
+            if (folder != 0) new MapiObject(folder).Dispose();
+            if (previous is not null) operation += $"; store HRESULT 0x{previous.Result:X8}";
+            throw new MapiException(operation, resultCode, previous);
+        }
         var result = new MapiObject(folder);
         if (type == MapiFolder) return result;
         result.Dispose();
