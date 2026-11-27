@@ -156,6 +156,58 @@ internal sealed class MailboxSession
         return sources;
     }
 
+    public Task<int> ExportPstAsync(Preview preview, string path, Action<long> progress, CancellationToken token) => InvokeAsync(() =>
+    {
+        token.ThrowIfCancellationRequested();
+        if (!ReferenceEquals(preview, _currentPreview) || !_browseStores.TryGetValue(preview.Target.StoreId, out var store) || _runtime is null)
+            throw new InvalidOperationException("The preview is no longer current. Run Preview again before exporting.");
+        if (preview.Rows.Count == 0) throw new InvalidOperationException("There are no messages to export.");
+        var target = Path.GetFullPath(path);
+        if (!Path.GetExtension(target).Equals(".pst", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Choose a destination with the .pst extension.");
+        if (File.Exists(target) || Directory.Exists(target))
+            throw new IOException("Choose a new PST file. Existing files are not overwritten.");
+
+        var staging = Directory.CreateDirectory(Path.Combine(Path.GetDirectoryName(target)!, $".MAPICommander-{Guid.NewGuid():N}"));
+        var temporaryPst = Path.Combine(staging.FullName, "export.pst");
+        var count = 0;
+        var published = false;
+        try
+        {
+            Mapi.WithNewPst(_runtime, temporaryPst, destination =>
+            {
+                foreach (var group in preview.Rows.GroupBy(row => row.Source))
+                {
+                    token.ThrowIfCancellationRequested();
+                    using var source = Mapi.OpenFolder(store, group.Key.Id, write: false);
+                    foreach (var row in group)
+                    {
+                        token.ThrowIfCancellationRequested();
+                        Mapi.CopyMessageToPst(source, destination, row.Id);
+                        progress(++count);
+                    }
+                }
+            }, token);
+            token.ThrowIfCancellationRequested();
+            File.Move(temporaryPst, target, overwrite: false);
+            published = true;
+            return count;
+        }
+        finally
+        {
+            try
+            {
+                File.Delete(temporaryPst);
+                staging.Delete();
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                var status = published ? "The PST was saved" : "The PST was not saved";
+                throw new IOException($"{status}, but the temporary export folder could not be removed: {staging.FullName}. {e.Message}", e);
+            }
+        }
+    });
+
     public Task<int> RemoveAsync(Preview preview, IReadOnlyList<int>? selectedIndices, bool hard, Action onFirstBatch,
         Action<long> progress, CancellationToken token) => InvokeAsync(() =>
     {

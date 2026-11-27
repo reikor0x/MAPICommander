@@ -34,6 +34,7 @@ internal sealed class MailboxForm : Form
     private readonly CheckBox _largest = new() { Text = "Largest first", AutoSize = true };
     private readonly Button _preview = new() { Text = "Preview", AutoSize = true };
     private readonly Button _export = new() { Text = "Export TSV", AutoSize = true };
+    private readonly Button _exportPst = new() { AutoSize = true };
     private readonly Button _move = new() { Text = "Move to Deleted Items", AutoSize = true };
     private readonly Button _hardDelete = new() { Text = "Hard delete...", AutoSize = true };
     private readonly Button _cancel = new() { Text = "Cancel operation", AutoSize = true };
@@ -68,7 +69,7 @@ internal sealed class MailboxForm : Form
         _scopeBanner.Font = _headingFont;
         _scopeBanner.Height = 36;
         _preview.Font = _headingFont;
-        foreach (var button in new[] { _reloadProfiles, _connect, _preview, _export, _move, _hardDelete, _cancel })
+        foreach (var button in new[] { _reloadProfiles, _connect, _preview, _export, _exportPst, _move, _hardDelete, _cancel })
         {
             button.FlatStyle = FlatStyle.Flat;
             button.FlatAppearance.BorderColor = SystemColors.ControlDark;
@@ -110,7 +111,7 @@ internal sealed class MailboxForm : Form
         layout.Controls.Add(Bar(_wholeMailbox, _includeSubfolders, _largest, _preview), 0, 3);
         layout.Controls.Add(_scopeBanner, 0, 4);
         layout.Controls.Add(split, 0, 5);
-        layout.Controls.Add(Bar(_export, _move, _hardDelete, _cancel), 0, 6);
+        layout.Controls.Add(Bar(_export, _exportPst, _move, _hardDelete, _cancel), 0, 6);
         _status.Height = 26;
         layout.Controls.Add(_status, 0, 7);
         layout.Controls.Add(_progress, 0, 8);
@@ -165,6 +166,7 @@ internal sealed class MailboxForm : Form
         _to.ValueChanged += (_, _) => ClearReport();
         _preview.Click += async (_, _) => await PreviewAsync();
         _export.Click += async (_, _) => await ExportAsync();
+        _exportPst.Click += async (_, _) => await ExportPstAsync();
         _move.Click += async (_, _) => await RemoveAsync(hard: false);
         _hardDelete.Click += async (_, _) => await RemoveAsync(hard: true);
         _cancel.Click += (_, _) => RequestCancellation();
@@ -230,6 +232,7 @@ internal sealed class MailboxForm : Form
         _largest.Text = T("Largest first");
         _preview.Text = T("Preview");
         _export.Text = T("Export TSV");
+        _exportPst.Text = T("Export PST (experimental)");
         _move.Text = T("Move to Deleted Items");
         _hardDelete.Text = T("Hard delete...");
         _cancel.Text = T("Cancel operation");
@@ -414,6 +417,28 @@ internal sealed class MailboxForm : Form
         }, interruptedHint: () => T("The output file may be incomplete."), activeNode: SearchNode);
     }
 
+    private Task ExportPstAsync()
+    {
+        if (_report is not { Rows.Count: > 0 } report || SearchNode is not { } node || !ReferenceEquals(node.Tag, report.Target))
+            return Task.CompletedTask;
+        if (MessageBox.Show(this,
+                T("Export all {0:N0} previewed messages to a new PST, including bodies, recipients and attachments? This is experimental and may take a long time. The mailbox is not modified. Keep the PST in a secure location.", report.Rows.Count),
+                T("Export PST (experimental)"), MessageBoxButtons.OKCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.OK)
+            return Task.CompletedTask;
+        using var dialog = new SaveFileDialog
+        {
+            Filter = T("Outlook data file (*.pst)") + "|*.pst", FileName = "MAPICommander-export.pst",
+            DefaultExt = "pst", CheckPathExists = true, OverwritePrompt = false
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK) return Task.CompletedTask;
+        var path = dialog.FileName;
+        return ExecuteAsync("Exporting PST (experimental)", async token =>
+        {
+            var count = await _session.ExportPstAsync(report, path, ReportProgress, token);
+            SetStatus("PST saved: {0:N0} messages.", count);
+        }, total: report.Rows.Count, activeNode: node);
+    }
+
     private Task RemoveAsync(bool hard)
     {
         if (_report is not { Rows.Count: > 0 } report || SearchNode is not { } node || !ReferenceEquals(node.Tag, report.Target)) return Task.CompletedTask;
@@ -541,7 +566,7 @@ internal sealed class MailboxForm : Form
         _profile.Enabled = idle && _profile.Items.Count > 0;
         _connect.Enabled = idle && _profile.SelectedItem is Mapi.Profile;
         _preview.Enabled = idle && SearchNode is not null;
-        _export.Enabled = _move.Enabled = _hardDelete.Enabled = _preview.Enabled && _report is { Rows.Count: > 0 };
+        _export.Enabled = _exportPst.Enabled = _move.Enabled = _hardDelete.Enabled = _preview.Enabled && _report is { Rows.Count: > 0 };
         _cancel.Enabled = _operation is { IsCancellationRequested: false };
         _preview.BackColor = _preview.Enabled ? SystemColors.Highlight : SystemColors.Control;
         _preview.ForeColor = _preview.Enabled ? SystemColors.HighlightText : SystemColors.GrayText;

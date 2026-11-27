@@ -6,6 +6,10 @@ This history was reconstructed from the repository's release tags and commits. C
 
 No unreleased changes yet.
 
+## [0.9.0 Beta](https://github.com/reikor0x/MAPICommander/releases/tag/v0.9.0-beta)
+
+- Added experimental export of previewed messages to a new Unicode PST. Full content (bodies, recipients, and attachments) is fetched only on export, not during preview or removal.
+
 ## [0.8.1 Beta](https://github.com/reikor0x/MAPICommander/releases/tag/v0.8.1-beta)
 
 - Added a custom mail icon to the executable, window, Windows taskbar, and version label.

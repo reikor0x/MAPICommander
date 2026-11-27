@@ -71,7 +71,7 @@ internal static unsafe class Native
     internal static extern uint MAPIFreeBuffer(void* buffer);
 }
 
-internal static unsafe class Mapi
+internal static unsafe partial class Mapi
 {
     internal const uint Unicode = 0x80000000;
     internal const int MutationBatchSize = 256;

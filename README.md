@@ -1,4 +1,4 @@
-# MAPICommander 0.8.1 Beta
+# MAPICommander 0.9 Beta
 
 MAPICommander is a Windows tool for counting, listing, and removing email from Exchange. The desktop interface can search one folder, a folder and its subfolders, or an entire mailbox. The CLI works on one folder at a time. Both use the existing classic Outlook profile through Extended MAPI, not EWS, and do not require an Entra app registration.
 
@@ -25,6 +25,8 @@ The current version is displayed at the top right. Under **Options → Language*
 4. Select **Move to Deleted Items** or **Hard delete**, then choose **All previewed messages**, **Only highlighted messages**, or **Cancel**. Use Ctrl or Shift to highlight multiple rows. Changing the folder or search options clears the preview. Removal uses only the chosen preview rows, even across multiple folders; it never includes new matches. If the chosen rows include messages already in Deleted Items, the move is refused before any messages are changed.
 
 The full-width progress bar shows a percentage when a total is available. Subfolder and mailbox-wide search progress is based on folders scanned, not messages; folder sizes can vary. The bar is indeterminate while discovering folders or if MAPI cannot count rows. When a search succeeds, the bar disappears and the status line shows **Search ended** and the match count.
+
+After a successful search, **Export PST (experimental)** copies all previewed messages (not just highlighted rows) into one **MAPICommander Export** folder in a new Unicode PST. The preview reads only MAPI table metadata without opening individual messages. Removal uses the previewed EntryIDs in batches; it does not fetch message bodies, recipients, or attachments for export. The app opens individual messages and reads their full content only after you confirm the PST export and choose a destination. The export does not modify the source mailbox and can take much longer than the preview. It uses the classic Outlook PST provider and a temporary MAPI profile, does not overwrite existing files, and saves the final PST only after the copy completes. Open the PST in classic Outlook and verify it before relying on it as a backup. Store the file securely: it contains the full message content.
 
 The GUI uses the same MAPI store for preview and removal, and requests write access to source folders only after confirmation. A read-only mailbox can still be previewed. If the operation stops before a removal batch is submitted, no messages were changed by that attempt. After submission, a failed batch may have changed the mailbox even if zero messages are confirmed. Cancellation cannot undo completed changes; run a fresh preview before retrying.
 

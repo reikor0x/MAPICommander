@@ -6,7 +6,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <DisableWinExeOutputInference>true</DisableWinExeOutputInference>
     <ApplicationIcon>MAPICommander.ico</ApplicationIcon>
-    <Version>0.8.1-beta</Version>
+    <Version>0.9.0-beta</Version>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
