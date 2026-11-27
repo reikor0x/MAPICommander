@@ -5,18 +5,18 @@ using System.Runtime.InteropServices;
 internal static class Program
 {
     private const string Usage = """
-        MAPICommander stores [--profile NOME]
-        MAPICommander folders [--profile NOME] --store NOME [--folder "Cartella\Sottocartella"] [--online]
-        MAPICommander scan [--profile NOME] --store NOME --folder "Cartella\Sottocartella"
-            [--from DATA] (--before DATA | --to DATA) [--list] [--online]
+        MAPICommander stores [--profile NAME]
+        MAPICommander folders [--profile NAME] --store NAME [--folder "Folder\Subfolder"] [--online]
+        MAPICommander scan [--profile NAME] --store NAME --folder "Folder\Subfolder"
+            [--from DATE] (--before DATE | --to DATE) [--list] [--online]
             [--delete | --hard-delete] [--whatif | --yes]
 
-        DATA: yyyy-MM-dd o d/M/yyyy (UTC), oppure yyyy-MM-ddTHH:mm:ssZ / yyyy-MM-ddTHH:mm:ss+01:00.
-        --from e' incluso, --before e' escluso; --to include l'intera data finale (solo data, senza orario).
-        scan conta senza modificare; --list scrive data UTC ed EntryID in formato TSV.
-        --whatif produce il report TSV senza modificare nulla, anche insieme a --delete o --hard-delete.
-        --delete sposta in Posta eliminata; --hard-delete la salta. --yes salta la conferma interattiva.
-        Senza --profile si apre il selettore dei profili Outlook classico.
+        DATE: yyyy-MM-dd or d/M/yyyy (UTC), or yyyy-MM-ddTHH:mm:ssZ / yyyy-MM-ddTHH:mm:ss+01:00.
+        --from is inclusive; --before is exclusive; --to includes the whole final day (date only).
+        scan counts without making changes; --list reports the received time in UTC and EntryID as TSV.
+        --whatif produces the TSV report without making changes, even with --delete or --hard-delete.
+        --delete moves messages to Deleted Items; --hard-delete bypasses it. --yes skips confirmation.
+        Omit --profile to open the classic Outlook profile chooser.
         """;
 
     [STAThread]

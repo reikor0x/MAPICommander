@@ -1,57 +1,73 @@
-# MAPICommander
+# MAPICommander 0.6 Beta
 
-Console per Windows che usa Extended MAPI tramite interop nativa, senza EWS e senza registrare un'app Entra. Usa lo stesso profilo di **Outlook classico** (non il nuovo Outlook) e i relativi permessi Exchange. La mailbox delegata con Full Access deve apparire come **store** del profilo: aprila prima in Outlook tramite automapping o aggiungila alla configurazione del profilo. Questa versione non apre per indirizzo SMTP una mailbox non montata.
+MAPICommander is a Windows command-line tool for counting, listing, and removing email from a single Exchange mailbox folder. It uses the existing classic Outlook profile through Extended MAPI, not EWS, and does not require an Entra app registration.
 
-## Pubblicazione in un unico EXE
+> **Beta software.** MAPICommander is provided **as is**, without warranty of any kind, express or implied. There is no guarantee that it will work correctly or that it is suitable for your environment. Test it on a disposable folder and review a read-only preview before deleting anything. Hard-deleted messages may not be recoverable.
 
-Per generare l'eseguibile da distribuire, usa l'SDK .NET 10 o successivo sul PC di sviluppo:
+## Download and requirements
 
-```powershell
-dotnet publish -c Release
-$app = '.\bin\Release\net10.0\win-x64\publish\MAPICommander.exe'
-```
+Download the self-contained Windows executable from [GitHub Releases](https://github.com/reikor0x/MAPICommander/releases). No separate .NET runtime or DLLs are needed. Match the executable to **Outlook's** architecture: `win-x64` for 64-bit Outlook and `win-x86` for 32-bit Outlook.
 
-Da Visual Studio puoi usare **Pubblica > Cartella** con configurazione Release. Distribuisci solo `MAPICommander.exe` dalla cartella di pubblicazione, non dalla cartella della normale build. Il runtime .NET e le relative librerie sono inclusi: non serve installarli sul PC di destinazione. All'avvio il runtime puo' estrarre componenti nativi in una propria cartella temporanea.
+- **Classic Outlook for Windows** with a working Exchange profile. The new Outlook is not supported. Run the tool in the Windows session that owns the profile.
+- For a delegated or shared mailbox, grant the Outlook user the appropriate Exchange permissions (typically Full Access) and ensure the mailbox appears as a separate store in the selected profile. Use Outlook automapping or add the mailbox to the profile. Opening an unmounted mailbox by SMTP address is not supported.
 
-L'eseguibile deve avere la stessa architettura di Outlook, non necessariamente di Windows. Il progetto pubblica per x64 per impostazione predefinita. Per Outlook a 32 bit usa `dotnet publish -c Release -r win-x86` e sostituisci `win-x64` con `win-x86` nel percorso. Outlook classico e il profilo MAPI gia' configurato restano necessari. Avvia la console nella sessione Windows del proprietario del profilo. Microsoft non fornisce un wrapper ufficiale di Extended MAPI per .NET; valida l'interoperabilita con il tuo Outlook prima dell'uso operativo.
+## Quick start
 
-## Esempi
-
-Se ometti `--profile`, si apre il selettore di Outlook. Usa il nome esatto dello store mostrato da `stores`; se ci sono omonimi il programma si ferma. I nomi delle cartelle sono quelli del profilo e il percorso parte dalla radice della posta dello store.
+The examples use PowerShell. Adjust the filename to match the executable you downloaded and use the store and folder names shown by your Outlook profile.
 
 ```powershell
-& $app stores --profile 'Outlook'
-& $app folders --profile 'Outlook' --store 'Mailbox Delegata'
-& $app folders --profile 'Outlook' --store 'Mailbox Delegata' --folder 'Posta in arrivo'
-& $app scan --profile 'Outlook' --store 'Mailbox Delegata' --folder 'Posta in arrivo\Archivio' --before '2025-01-01' --online
-& $app scan --profile 'Outlook' --store 'Mailbox Delegata' --folder 'Posta in arrivo\Archivio' --before '2025-01-01' --online --list > .\anteprima.tsv
+$app = '.\MAPICommander-win-x64.exe'
+& $app stores
+& $app folders --profile 'Outlook' --store 'Shared Mailbox'
+& $app folders --profile 'Outlook' --store 'Shared Mailbox' --folder 'Inbox'
 ```
 
-- `scan` scrive il conteggio; `--list` scrive solo `received_utc` e `entry_id_hex` come TSV. Diagnostica e tempi sono su stderr. Gli EntryID sono identificatori opachi MAPI, non ID Internet e non vanno riutilizzati tra sessioni.
-- Il filtro usa la data di ricezione (`PR_MESSAGE_DELIVERY_TIME`). Specifica `--before` (limite esclusivo) oppure `--to` (include l'intera data finale); aggiungi `--from` per un limite iniziale incluso. Le date `yyyy-MM-dd` e `d/M/yyyy` sono interpretate in UTC. Per un orario locale esplicito usa, con `--from` o `--before`, ad esempio `2025-01-01T00:00:00+01:00`. Sono inclusi `IPM.Note` e sottoclassi, esclusi bozze senza data di ricezione, riunioni, cartelle di ricerca e sottocartelle.
-- `--online` chiede al provider Exchange di usare il server senza passare dalla cache locale. Senza l'opzione si segue la modalita' del profilo e la cache potrebbe non contenere tutto lo storico. Il programma non ripiega sulla cache se l'apertura online fallisce.
-
-Per spostare in **Posta eliminata della stessa mailbox**, ripeti lo scan con `--delete` e digita `SPOSTA` dopo aver controllato il conteggio. Solo per esecuzioni deliberate e non interattive aggiungi `--yes`.
+Omit `--profile` to open the profile chooser. `--store` uses the displayed store name, not the mailbox email address. Ambiguous names are rejected. Folder paths are relative to the mailbox's mail root, with `\` between segments. Outlook may display localized folder names.
 
 ```powershell
-& $app scan --profile 'Outlook' --store 'Mailbox Delegata' --folder 'Posta in arrivo\Archivio' --before '2025-01-01' --online --delete
+$target = @('--profile', 'Outlook', '--store', 'Shared Mailbox', '--folder', 'Inbox\Archive')
+
+# Count messages received before January 1, 2025 (UTC). No mailbox changes.
+& $app scan @target --before '2025-01-01' --online
+
+# Preview the messages a hard delete would target. No mailbox changes.
+& $app scan @target --from '2018-01-01' --to '2028-12-31' --online --hard-delete --whatif > .\preview.tsv
 ```
 
-Per eliminare **senza passare da Posta eliminata**, usa `--hard-delete` al posto di `--delete`. La conferma richiesta e' `ELIMINA DEFINITIVAMENTE`; `--yes` la salta. La conservazione lato server dipende dalle policy di Exchange, ad esempio retention e hold.
+## Filters and output
 
-Con `--whatif`, anche se specifichi `--delete` o `--hard-delete`, l'app apre la cartella in sola lettura e scrive un report TSV con data di ricezione UTC ed EntryID, senza corpo, oggetto o allegati. Non combinare `--whatif` e `--yes`.
+| Option | Behavior |
+| --- | --- |
+| `--from DATE` | Optional inclusive start. |
+| `--before DATE` | Exclusive end. Choose this or `--to`, not both. |
+| `--to DATE` | Inclusive final calendar day in UTC. Accepts a date only. |
+| `--online` | Requests direct access to Exchange instead of the Outlook cache. If online opening fails, the tool does not fall back to cached mode. Without this option, the cache may not contain the full history. |
+| `--list` | Lists matches as TSV. Without it, a normal scan prints only the count. |
+| `--whatif` | Produces the same minimal TSV report without opening the folder for writing or applying a deletion. Works with `--delete` or `--hard-delete`. |
+
+Dates without a time use UTC. Use `yyyy-MM-dd` (recommended) or `d/M/yyyy`. For `--from` and `--before`, you may also specify a timestamp with `Z` or an explicit offset, for example `2025-01-01T00:00:00+01:00`.
+
+The filter uses the message's **received** timestamp, not its sent or creation timestamp. It matches standard mail (`IPM.Note` and subclasses) with a received timestamp in the selected folder only. It does not recurse or scan search folders. The TSV contains only `received_utc` and `entry_id_hex`. Entry IDs are opaque MAPI identifiers, not Internet Message-IDs or a reusable delete list. Diagnostics and timings go to stderr.
+
+## Removing messages
+
+After reviewing the preview, rerun the command without `--whatif` and without the report redirection. The tool scans again; the preview is not a snapshot or a lock on the mailbox.
+
+- **`--delete`** moves matches to Deleted Items in the same mailbox. Type `SPOSTA` at the confirmation prompt.
+- **`--hard-delete`** bypasses Deleted Items. Type `ELIMINA DEFINITIVAMENTE` at the confirmation prompt. Exchange retention and hold policies still apply; hard delete does not guarantee immediate server-side erasure.
+- **`--yes`** skips interactive confirmation, including for hard delete. Use only when intentionally running unattended. It cannot be combined with `--whatif`.
+
+Deletion is not atomic. An error or Ctrl+C may leave some messages already moved or deleted. Rerun a read-only scan before retrying. To validate the tool with your Outlook build and Exchange configuration, start with a test folder containing messages before, on, and after your date boundaries, and a message in a subfolder that should not match.
+
+## Build from source
+
+Use the .NET 10 SDK or later on the development machine:
 
 ```powershell
-# Anteprima dell'hard delete dal 1 gennaio 2018 al 31 dicembre 2028 inclusi (UTC)
-& $app scan --profile 'Outlook' --store 'Mailbox Delegata' --folder 'Posta in arrivo\Archivio' --from '1/1/2018' --to '31/12/2028' --online --hard-delete --whatif > .\anteprima.tsv
+dotnet publish -c Release -r win-x64
+dotnet publish -c Release -r win-x86
 ```
 
-Per procedere dopo aver letto il report, rilancia lo stesso comando senza `--whatif` e senza il reindirizzamento. Verra' eseguita una nuova scansione: il report non blocca la cartella. Le modifiche non sono atomiche: un errore o `Ctrl+C` puo' lasciare blocchi gia' spostati o eliminati. In caso di esito parziale, riesegui lo scan prima di riprovare.
+Each build produces a single `MAPICommander.exe` under `bin\Release\net10.0\<runtime>\publish`. Distribute the executable from the **publish** directory, not the regular build output. The embedded runtime may extract native components to a temporary location at startup.
 
-## Prestazioni e verifica
-
-Il filtro sulla data e' applicato da `IMAPITable::Restrict`; `QueryRows` legge fino a 512 righe alla volta, richiedendo solo data, classe e, se serve, EntryID. Nessuna apertura del singolo messaggio, lettura del corpo o download di allegati. Lo spostamento usa `CopyMessages` con `MESSAGE_MOVE`; l'hard delete usa `DeleteMessages` con `DELETE_HARD_DELETE`. Entrambi procedono a blocchi di 256, dopo aver raccolto gli ID delle corrispondenze, per non alterare la tabella durante la scansione. Tempi effettivi: misurali sulla cartella in questione; non e' garantito un vantaggio rispetto a EWS.
-
-Per il collaudo usa una cartella di prova nella mailbox delegata: includi messaggi precedenti, esattamente alla soglia, successivi e uno in una sottocartella. Verifica conteggio e TSV, annulla una prova con `--delete` e controlla che non cambi nulla. Poi conferma lo spostamento e controlla sorgente e Posta eliminata.
-
-Riferimenti: [accesso al profilo in MrMAPI](https://github.com/microsoft/mfcmapi/blob/main/MrMapi/MrMAPI.cpp), [tabelle di contenuto in MFCMAPI](https://github.com/microsoft/mfcmapi/blob/main/core/mapi/processor/mapiProcessor.cpp), [header di Microsoft MAPI Stub Library](https://github.com/microsoft/MAPIStubLibrary/tree/main/include).
+The implementation applies the date filter with `IMAPITable::Restrict`, reads up to 512 rows at a time without opening individual messages, and moves or deletes in batches of up to 256. Measure performance against your mailbox; a speed advantage over EWS is not guaranteed. Extended MAPI does not have an official Microsoft .NET wrapper. The native calls are based on the patterns in [MFCMAPI](https://github.com/microsoft/mfcmapi) and the headers in [Microsoft's MAPI Stub Library](https://github.com/microsoft/MAPIStubLibrary).
