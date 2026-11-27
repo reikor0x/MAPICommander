@@ -93,6 +93,7 @@ internal static unsafe class Mapi
 
     internal record NamedEntry(string Name, byte[] Id);
     internal sealed record Profile(string Name, bool IsDefault);
+    internal enum StoreAccess { ReadOnly, Write, BestAvailable }
 
     internal static void Check(int result, string operation)
     {
@@ -132,11 +133,18 @@ internal static unsafe class Mapi
         return ReadNames(handle, cancellation, allowAnsi: true);
     }
 
-    internal static MapiObject OpenStore(MapiObject session, byte[] entryId, bool write, bool online)
+    internal static MapiObject OpenStore(MapiObject session, byte[] entryId, StoreAccess access, bool online)
     {
-        const uint noDialog = 0x1, mdbWrite = 0x4, noMail = 0x80, mdbOnline = 0x100;
+        const uint noDialog = 0x1, mdbWrite = 0x4, bestAccess = 0x10, noMail = 0x80, mdbOnline = 0x100;
         nint store = 0;
-        var flags = noDialog | noMail | (write ? mdbWrite : 0) | (online ? mdbOnline : 0);
+        var accessFlags = access switch
+        {
+            StoreAccess.ReadOnly => 0u,
+            StoreAccess.Write => mdbWrite,
+            StoreAccess.BestAvailable => bestAccess,
+            _ => throw new ArgumentOutOfRangeException(nameof(access))
+        };
+        var flags = noDialog | noMail | accessFlags | (online ? mdbOnline : 0);
         var call = (delegate* unmanaged[Stdcall]<nint, nuint, uint, byte*, void*, uint, nint*, int>)session.Method(OpenMsgStore);
         fixed (byte* id = entryId)
             Check(call(session.Pointer, 0, (uint)entryId.Length, id, null, flags, &store), "IMAPISession::OpenMsgStore");
@@ -169,6 +177,8 @@ internal static unsafe class Mapi
 
     internal static MapiObject OpenMailRoot(MapiObject store, bool write = false) =>
         OpenFolder(store, ReadBinaryProperty(store, IpmSubtree, "PR_IPM_SUBTREE_ENTRYID"), write);
+
+    internal static byte[] GetFolderEntryId(MapiObject folder) => ReadBinaryProperty(folder, EntryId, "PR_ENTRYID della cartella sorgente");
 
     internal static void EnsureNormalFolder(MapiObject folder)
     {
@@ -237,7 +247,7 @@ internal static unsafe class Mapi
     internal static MapiObject OpenTrash(MapiObject store, MapiObject source)
     {
         var trashId = ReadBinaryProperty(store, IpmWastebasket, "PR_IPM_WASTEBASKET_ENTRYID");
-        var sourceId = ReadBinaryProperty(source, EntryId, "PR_ENTRYID della cartella sorgente");
+        var sourceId = GetFolderEntryId(source);
         uint same = 0;
         var compare = (delegate* unmanaged[Stdcall]<nint, uint, byte*, uint, byte*, uint, uint*, int>)store.Method(StoreCompareEntryIds);
         fixed (byte* s = sourceId, t = trashId)
@@ -246,19 +256,21 @@ internal static unsafe class Mapi
         return OpenFolder(store, trashId, true);
     }
 
-    internal static void Move(MapiObject source, MapiObject destination, ReadOnlySpan<byte[]> ids) =>
+    internal static void Move(MapiObject source, MapiObject destination, ReadOnlySpan<byte[]> ids, Action? onSubmit = null) =>
         ApplyToBatch(ids, list =>
         {
             const uint messageMove = 1;
             var move = (delegate* unmanaged[Stdcall]<nint, EntryList*, void*, nint, nuint, nint, uint, int>)source.Method(CopyMessages);
+            onSubmit?.Invoke();
             Check(move(source.Pointer, list, null, destination.Pointer, 0, 0, messageMove), "IMAPIFolder::CopyMessages (MESSAGE_MOVE)");
         });
 
-    internal static void HardDelete(MapiObject source, ReadOnlySpan<byte[]> ids) =>
+    internal static void HardDelete(MapiObject source, ReadOnlySpan<byte[]> ids, Action? onSubmit = null) =>
         ApplyToBatch(ids, list =>
         {
             const uint deleteHardDelete = 0x10;
             var delete = (delegate* unmanaged[Stdcall]<nint, EntryList*, nuint, nint, uint, int>)source.Method(DeleteMessages);
+            onSubmit?.Invoke();
             Check(delete(source.Pointer, list, 0, 0, deleteHardDelete), "IMAPIFolder::DeleteMessages (DELETE_HARD_DELETE)");
         });
 
@@ -286,7 +298,7 @@ internal static unsafe class Mapi
         }
     }
 
-    private static MapiObject OpenFolder(MapiObject store, byte[] entryId, bool write) =>
+    internal static MapiObject OpenFolder(MapiObject store, byte[] entryId, bool write) =>
         OpenFolderEntry(store, StoreOpenEntry, "IMsgStore::OpenEntry", entryId, write);
 
     internal static MapiObject OpenChildFolder(MapiObject store, MapiObject parent, byte[] entryId, bool write)

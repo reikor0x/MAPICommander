@@ -90,7 +90,7 @@ internal static class Program
         }
 
         var selected = Mapi.FindUnique(stores, options.Store!, "Store", "Usa il comando stores e verifica il profilo Outlook.");
-        using var store = Mapi.OpenStore(session, selected.Id, options.Writes, options.Online);
+        using var store = Mapi.OpenStore(session, selected.Id, options.Writes ? Mapi.StoreAccess.Write : Mapi.StoreAccess.ReadOnly, options.Online);
         using var folder = Mapi.ResolveFolder(store, options.Folder, options.Writes, cancellation);
         if (options.Command == "folders")
         {

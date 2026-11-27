@@ -1,4 +1,4 @@
-# MAPICommander 0.7.3 Beta
+# MAPICommander 0.7.4 Beta
 
 MAPICommander is a Windows tool for counting, listing, and removing email from a single Exchange mailbox folder. The same executable provides a desktop mailbox browser and a command-line interface. Both use the existing classic Outlook profile through Extended MAPI, not EWS, and do not require an Entra app registration.
 
@@ -17,16 +17,18 @@ Open the executable without arguments (or pass `--gui`). Select a profile from t
 
 1. Expand a mailbox store in the tree and select a folder.
 2. Set the inclusive final date and, optionally, an inclusive start date. Dates are in UTC.
-3. Select **Preview** to scan in read-only mode. The list shows only received time and EntryID; **Export TSV** saves the report.
+3. Select **Preview** to scan without changing the mailbox. The list shows only received time and EntryID; **Export TSV** saves the report.
 4. If you want to remove the previewed messages, select **Move to Deleted Items** or **Hard delete** and confirm. Changing the folder or dates clears the preview. The desktop interface uses the IDs from that preview and does not include new matches that appeared after it.
 
-The status bar shows scan and deletion progress. Cancellation is checked between MAPI batches and cannot undo a completed batch.
+The status bar shows scan and deletion progress. The GUI uses the same MAPI store for preview and removal, and requests write access to the exact previewed folder only after confirmation. A read-only mailbox can still be previewed. If the operation stops before a removal batch is submitted, no messages were changed by that attempt. After submission, a failed batch may have changed the mailbox even if zero messages are confirmed. Cancellation cannot undo completed changes; run a fresh preview before retrying.
 
 If an older build reports `IMAPISession::GetMsgStoresTable` with HRESULT `0x80040103` after logon, update to 0.7.1 Beta or later. The error indicates that the provider rejected the Unicode table flag, not that the profile name was incorrect. If logon succeeds but no stores appear, verify that classic Outlook opens a mailbox with the same profile and that any delegated mailbox is mounted in it.
 
 If 0.7.1 Beta reports `IMsgStore::OpenEntry` with HRESULT `0x80040106` when expanding a mailbox, update to 0.7.2 Beta or later. This error was caused by an incorrect native MAPI method binding, not by the **Online** option.
 
 If an older build reports `0x80040107` when opening or previewing a subfolder, try 0.7.3 Beta or later. It reuses the browsing store and retries the exact folder EntryID through its parent if the store rejects it. It does not switch from online to cached mode or choose a folder by name. If both calls fail, the dialog reports both MAPI results.
+
+If preview succeeds but removal fails with `0x80040107` in 0.7.3 Beta, update to 0.7.4 Beta. The GUI no longer closes and reopens the store between preview and removal. If the error persists, note the MAPI operation name and HRESULT, and test only on a disposable folder.
 
 ## Command-line quick start
 

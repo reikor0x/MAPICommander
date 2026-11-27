@@ -20,7 +20,7 @@ internal sealed class MailboxForm : Form
     private readonly ToolStripStatusLabel _status = new() { Spring = true, TextAlign = ContentAlignment.MiddleLeft };
     private readonly ToolStripProgressBar _progress = new() { Maximum = 1000, Visible = false };
     private readonly System.Windows.Forms.Timer _refresh = new() { Interval = 200 };
-    private List<MailboxSession.Row> _report = [];
+    private MailboxSession.Preview? _report;
     private CancellationTokenSource? _operation;
     private long _processed;
     private bool _closing, _stopped;
@@ -90,13 +90,13 @@ internal sealed class MailboxForm : Form
         _cancel.Click += (_, _) => RequestCancellation();
         _rows.RetrieveVirtualItem += (_, e) =>
         {
-            if ((uint)e.ItemIndex >= (uint)_report.Count)
+            if (_report is not { Rows: var rows } || (uint)e.ItemIndex >= (uint)rows.Count)
             {
                 e.Item = new ListViewItem();
                 return;
             }
 
-            var row = _report[e.ItemIndex];
+            var row = rows[e.ItemIndex];
             e.Item = new ListViewItem([DateTime.FromFileTimeUtc(row.Received).ToString("u"), Convert.ToHexString(row.Id)]);
         };
         UpdateCommands();
@@ -174,17 +174,17 @@ internal sealed class MailboxForm : Form
             _report = await _session.PreviewAsync(target,
                 start is { } first ? DateTime.SpecifyKind(first, DateTimeKind.Utc).ToFileTimeUtc() : null,
                 DateTime.SpecifyKind(end.AddDays(1), DateTimeKind.Utc).ToFileTimeUtc(), ReportProgress, token);
-            _rows.VirtualListSize = _report.Count;
-            _status.Text = $"{_report.Count:N0} matching messages. No changes made.";
+            _rows.VirtualListSize = _report.Rows.Count;
+            _status.Text = $"{_report.Rows.Count:N0} matching messages. No changes made.";
         }, showCount: true);
     }
 
     private Task ExportAsync()
     {
+        if (_report is not { Rows: var report }) return Task.CompletedTask;
         using var dialog = new SaveFileDialog { Filter = "Tab-separated report (*.tsv)|*.tsv", FileName = "preview.tsv" };
         if (dialog.ShowDialog(this) != DialogResult.OK) return Task.CompletedTask;
         var path = dialog.FileName;
-        var report = _report;
         return ExecuteAsync("Exporting", async token =>
         {
             await Task.Run(() =>
@@ -198,30 +198,33 @@ internal sealed class MailboxForm : Form
                 }
             }, token);
             _status.Text = $"Exported {report.Count:N0} messages.";
-        }, interruptedHint: " The output file may be incomplete.");
+        }, interruptedHint: () => " The output file may be incomplete.");
     }
 
     private Task RemoveAsync(bool hard)
     {
-        if (SelectedFolder is not { } target || _report.Count == 0) return Task.CompletedTask;
-        var report = _report;
+        if (_report is not { Rows.Count: > 0 } report || !ReferenceEquals(SelectedFolder, report.Target)) return Task.CompletedTask;
+        var total = report.Rows.Count;
         var prompt = hard
-            ? $"Hard-delete {report.Count:N0} previewed messages from '{_folders.SelectedNode!.FullPath}'?\n\nThis bypasses Deleted Items and recovery may not be possible."
-            : $"Move {report.Count:N0} previewed messages from '{_folders.SelectedNode!.FullPath}' to Deleted Items?";
+            ? $"Hard-delete {total:N0} previewed messages from '{_folders.SelectedNode!.FullPath}'?\n\nThis bypasses Deleted Items and recovery may not be possible."
+            : $"Move {total:N0} previewed messages from '{_folders.SelectedNode!.FullPath}' to Deleted Items?";
         if (MessageBox.Show(this, prompt, hard ? "Confirm hard delete" : "Confirm move", MessageBoxButtons.YesNo,
             MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return Task.CompletedTask;
 
         ClearReport();
+        var batchStarted = 0;
         return ExecuteAsync(hard ? "Hard deleting" : "Moving", async token =>
         {
-            var count = await _session.RemoveAsync(target, report, hard, ReportProgress, token);
+            var count = await _session.RemoveAsync(report, hard, () => Volatile.Write(ref batchStarted, 1), ReportProgress, token);
             _status.Text = $"{count:N0} messages {(hard ? "hard-deleted" : "moved to Deleted Items")}.";
-        }, total: report.Count, interruptedHint: " Some messages may already have been removed. Preview again before retrying.");
+        }, total: total, interruptedHint: () => Volatile.Read(ref batchStarted) == 0
+            ? " No removal batch was submitted. Run Preview again before retrying."
+            : $" {Interlocked.Read(ref _processed):N0} messages confirmed; an unconfirmed batch may have changed the mailbox. Run Preview again before retrying.");
     }
 
     private async Task ExecuteAsync(string label, Func<CancellationToken, Task> work, int? total = null,
-        bool showCount = false, string interruptedHint = "")
+        bool showCount = false, Func<string>? interruptedHint = null)
     {
         if (_operation is not null || _closing) return;
         using var cancellation = new CancellationTokenSource();
@@ -252,14 +255,15 @@ internal sealed class MailboxForm : Form
         }
         catch (OperationCanceledException)
         {
-            _status.Text = $"{label} cancelled.{interruptedHint}";
+            _status.Text = $"{label} cancelled.{interruptedHint?.Invoke()}";
         }
         catch (Exception e) when (e is MapiException or InvalidOperationException or IOException or UnauthorizedAccessException
             or DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
         {
             _refresh.Stop();
-            _status.Text = $"{label} failed.{interruptedHint}";
-            MessageBox.Show(this, e.Message + interruptedHint, $"{label} failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            var hint = interruptedHint?.Invoke();
+            _status.Text = $"{label} failed.{hint}";
+            MessageBox.Show(this, e.Message + hint, $"{label} failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally
         {
@@ -282,9 +286,9 @@ internal sealed class MailboxForm : Form
 
     private void ClearReport()
     {
-        if (_report.Count != 0) _status.Text = "Preview cleared. Run Preview for the current selection.";
+        if (_report is { Rows.Count: > 0 }) _status.Text = "Preview cleared. Run Preview for the current selection.";
         _rows.VirtualListSize = 0;
-        _report = [];
+        _report = null;
         UpdateCommands();
     }
 
@@ -301,7 +305,7 @@ internal sealed class MailboxForm : Form
         _profile.Enabled = idle && _profile.Items.Count > 0;
         _connect.Enabled = idle && _profile.SelectedItem is Mapi.Profile;
         _preview.Enabled = idle && SelectedFolder is not null;
-        _export.Enabled = _move.Enabled = _hardDelete.Enabled = _preview.Enabled && _report.Count > 0;
+        _export.Enabled = _move.Enabled = _hardDelete.Enabled = _preview.Enabled && _report is { Rows.Count: > 0 };
         _cancel.Enabled = _operation is { IsCancellationRequested: false };
     }
 

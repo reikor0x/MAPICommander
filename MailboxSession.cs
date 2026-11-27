@@ -2,12 +2,14 @@ internal sealed class MailboxSession
 {
     internal sealed record Target(byte[] StoreId, byte[]? FolderId, Target? Parent = null);
     internal sealed record Row(long Received, byte[] Id);
+    internal sealed record Preview(Target Target, byte[] FolderId, IReadOnlyList<Row> Rows);
 
     private readonly TaskCompletionSource<Control> _dispatcher = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _stopped = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private MapiRuntime? _runtime;
     private MapiObject? _session;
     private readonly Dictionary<byte[], MapiObject> _browseStores = new(ReferenceEqualityComparer.Instance);
+    private Preview? _currentPreview;
     private bool _online;
 
     public MailboxSession()
@@ -73,36 +75,42 @@ internal sealed class MailboxSession
     public Task<List<Mapi.NamedEntry>> ChildrenAsync(Target target, CancellationToken token) => InvokeAsync(() =>
     {
         var store = GetBrowseStore(target);
-        using var folder = OpenTargetFolder(store, target, write: false, token);
+        using var folder = OpenTargetFolder(store, target, token);
         return Mapi.GetChildren(folder, token);
     });
 
-    public Task<List<Row>> PreviewAsync(Target target, long? from, long before, Action<long> progress, CancellationToken token) => InvokeAsync(() =>
+    public Task<Preview> PreviewAsync(Target target, long? from, long before, Action<long> progress, CancellationToken token) => InvokeAsync(() =>
     {
+        _currentPreview = null;
         var store = GetBrowseStore(target);
-        using var folder = OpenTargetFolder(store, target, write: false, token);
+        using var folder = OpenTargetFolder(store, target, token);
         Mapi.EnsureNormalFolder(folder);
+        // Read the long-term EntryID from the opened folder, not the hierarchy row.
+        var folderId = Mapi.GetFolderEntryId(folder);
         var rows = new List<Row>();
         Mapi.Scan(folder, from, before, (received, id) => rows.Add(new Row(received, id)), token, progress);
-        return rows;
+        return _currentPreview = new Preview(target, folderId, rows);
     });
 
-    public Task<int> RemoveAsync(Target target, IReadOnlyList<Row> rows, bool hard, Action<long> progress, CancellationToken token) => InvokeAsync(() =>
+    public Task<int> RemoveAsync(Preview preview, bool hard, Action onFirstBatch, Action<long> progress, CancellationToken token) => InvokeAsync(() =>
     {
         token.ThrowIfCancellationRequested();
-        if (_browseStores.Remove(target.StoreId, out var browseStore)) browseStore.Dispose();
-        using var store = OpenStore(target, write: true);
-        using var source = OpenTargetFolder(store, target, write: true, token);
+        if (!ReferenceEquals(preview, _currentPreview) || !_browseStores.TryGetValue(preview.Target.StoreId, out var store))
+            throw new InvalidOperationException("The preview is no longer current. Run Preview again before removing messages.");
+        _currentPreview = null;
+        var rows = preview.Rows;
+        using var source = Mapi.OpenFolder(store, preview.FolderId, write: true);
         Mapi.EnsureNormalFolder(source);
         using var destination = hard ? null : Mapi.OpenTrash(store, source);
         var batch = new byte[Math.Min(rows.Count, Mapi.MutationBatchSize)][];
         for (var offset = 0; offset < rows.Count;)
         {
-            token.ThrowIfCancellationRequested();
             var length = Math.Min(batch.Length, rows.Count - offset);
             for (var i = 0; i < length; i++) batch[i] = rows[offset + i].Id;
-            if (destination is null) Mapi.HardDelete(source, batch.AsSpan(0, length));
-            else Mapi.Move(source, destination, batch.AsSpan(0, length));
+            token.ThrowIfCancellationRequested();
+            var onSubmit = offset == 0 ? onFirstBatch : null;
+            if (destination is null) Mapi.HardDelete(source, batch.AsSpan(0, length), onSubmit);
+            else Mapi.Move(source, destination, batch.AsSpan(0, length), onSubmit);
             offset += length;
             progress(offset);
         }
@@ -110,32 +118,30 @@ internal sealed class MailboxSession
         return rows.Count;
     });
 
-    private MapiObject OpenStore(Target target, bool write) => Mapi.OpenStore(
-        _session ?? throw new InvalidOperationException("Connect to an Outlook profile first."), target.StoreId, write, _online);
-
     private MapiObject GetBrowseStore(Target target)
     {
         if (!_browseStores.TryGetValue(target.StoreId, out var store))
         {
-            store = OpenStore(target, write: false);
+            var session = _session ?? throw new InvalidOperationException("Connect to an Outlook profile first.");
+            store = Mapi.OpenStore(session, target.StoreId, Mapi.StoreAccess.BestAvailable, _online);
             _browseStores.Add(target.StoreId, store);
         }
         return store;
     }
 
-    private static MapiObject OpenTargetFolder(MapiObject store, Target target, bool write, CancellationToken token)
+    private static MapiObject OpenTargetFolder(MapiObject store, Target target, CancellationToken token)
     {
         var path = new Stack<byte[]>();
         for (var node = target; node.FolderId is { } id; node = node.Parent ?? throw new InvalidOperationException("Folder has no parent in the current mailbox tree."))
             path.Push(id);
         token.ThrowIfCancellationRequested();
-        var folder = Mapi.OpenMailRoot(store, write && path.Count == 0);
+        var folder = Mapi.OpenMailRoot(store);
         try
         {
             while (path.TryPop(out var id))
             {
                 token.ThrowIfCancellationRequested();
-                var next = Mapi.OpenChildFolder(store, folder, id, write && path.Count == 0);
+                var next = Mapi.OpenChildFolder(store, folder, id, write: false);
                 folder.Dispose();
                 folder = next;
             }
@@ -150,6 +156,7 @@ internal sealed class MailboxSession
 
     private void Disconnect()
     {
+        _currentPreview = null;
         foreach (var store in _browseStores.Values) store.Dispose();
         _browseStores.Clear();
         _session?.Dispose();
