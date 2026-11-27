@@ -1,4 +1,4 @@
-# MAPICommander 0.6 Beta
+# MAPICommander 0.6.1 Beta
 
 MAPICommander is a Windows command-line tool for counting, listing, and removing email from a single Exchange mailbox folder. It uses the existing classic Outlook profile through Extended MAPI, not EWS, and does not require an Entra app registration.
 
@@ -48,6 +48,8 @@ $target = @('--profile', 'Outlook', '--store', 'Shared Mailbox', '--folder', 'In
 Dates without a time use UTC. Use `yyyy-MM-dd` (recommended) or `d/M/yyyy`. For `--from` and `--before`, you may also specify a timestamp with `Z` or an explicit offset, for example `2025-01-01T00:00:00+01:00`.
 
 The filter uses the message's **received** timestamp, not its sent or creation timestamp. It matches standard mail (`IPM.Note` and subclasses) with a received timestamp in the selected folder only. It does not recurse or scan search folders. The TSV contains only `received_utc` and `entry_id_hex`. Entry IDs are opaque MAPI identifiers, not Internet Message-IDs or a reusable delete list. Diagnostics and timings go to stderr.
+
+In an interactive terminal, the scan shows a progress bar and a running match count without estimating a total. Moves and hard deletes show the number and percentage of messages confirmed by MAPI. Progress goes to stderr and is disabled if stderr is redirected; it never becomes part of the TSV or count output.
 
 ## Removing messages
 

@@ -148,7 +148,8 @@ internal static unsafe class Mapi
         return match ?? throw new InvalidOperationException($"{kind} non trovato: {name}. {hint}");
     }
 
-    internal static long Scan(MapiObject folder, long? from, long before, bool list, List<byte[]>? mutationIds, CancellationToken cancellation)
+    internal static long Scan(MapiObject folder, long? from, long before, bool list, List<byte[]>? mutationIds,
+        CancellationToken cancellation, Action<long>? reportProgress)
     {
         cancellation.ThrowIfCancellationRequested();
         var needsId = list || mutationIds is not null;
@@ -185,7 +186,7 @@ internal static unsafe class Mapi
             }
 
             count++;
-        }, cancellation);
+        }, cancellation, reportProgress is null ? null : () => reportProgress(count));
         return count;
     }
 
@@ -286,7 +287,7 @@ internal static unsafe class Mapi
 
     private delegate void ReadRow(Row* row);
 
-    private static void ReadRows(MapiObject table, ReadRow read, CancellationToken cancellation)
+    private static void ReadRows(MapiObject table, ReadRow read, CancellationToken cancellation, Action? onBatch = null)
     {
         var query = (delegate* unmanaged[Stdcall]<nint, int, uint, RowSet**, int>)table.Method(QueryRows);
         while (true)
@@ -301,6 +302,7 @@ internal static unsafe class Mapi
                 if (batch->Count == 0) return;
                 var rows = &batch->First;
                 for (var i = 0; i < batch->Count; i++) read(rows + i);
+                onBatch?.Invoke();
             }
             finally
             {

@@ -94,7 +94,14 @@ internal static class Program
         var list = options.List || options.WhatIf;
         if (list) Console.WriteLine("received_utc\tentry_id_hex");
         var timer = Stopwatch.StartNew();
-        var count = Mapi.Scan(folder, options.From?.ToFileTime(), before.ToFileTime(), list, ids, cancellation);
+        var progressOutput = Console.IsErrorRedirected ? null : Console.Error;
+        long count;
+        using (var progress = new ConsoleProgress(progressOutput, "Scansione", inline: !list || Console.IsOutputRedirected))
+        {
+            Action<long>? report = progressOutput is null ? null : progress.Report;
+            count = Mapi.Scan(folder, options.From?.ToFileTime(), before.ToFileTime(), list, ids, cancellation, report);
+            progress.Complete(count);
+        }
         Console.Error.WriteLine($"Corrispondenze: {count} ({timer.Elapsed.TotalSeconds:F2} s)");
         if (!list) Console.WriteLine(count);
         if (ids is null || ids.Count == 0) return 0;
@@ -113,6 +120,7 @@ internal static class Program
         timer.Restart();
         try
         {
+            using var progress = new ConsoleProgress(progressOutput, hardDelete ? "Hard delete" : "Spostamento", inline: true, ids.Count);
             while (processed < ids.Count)
             {
                 cancellation.ThrowIfCancellationRequested();
@@ -121,7 +129,9 @@ internal static class Program
                 if (hardDelete) Mapi.HardDelete(folder, entries);
                 else Mapi.Move(folder, trash!, entries);
                 processed += batch;
+                if (processed < ids.Count) progress.Report(processed);
             }
+            progress.Complete(processed);
         }
         catch (MapiException)
         {
