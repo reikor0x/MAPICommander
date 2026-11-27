@@ -1,4 +1,4 @@
-# MAPICommander 0.7 Beta
+# MAPICommander 0.7.1 Beta
 
 MAPICommander is a Windows tool for counting, listing, and removing email from a single Exchange mailbox folder. The same executable provides a desktop mailbox browser and a command-line interface. Both use the existing classic Outlook profile through Extended MAPI, not EWS, and do not require an Entra app registration.
 
@@ -13,7 +13,7 @@ Download the self-contained Windows executable from [GitHub Releases](https://gi
 
 ## Desktop interface
 
-Open the executable without arguments (or pass `--gui`). Select **Log on** with a named profile, or leave the name blank to open the Outlook profile chooser. Check **Online** before logging on if you want to request server access rather than use the Outlook cache.
+Open the executable without arguments (or pass `--gui`). Select a profile from the **Outlook profile** drop-down and click **Log on**. The list contains the classic Outlook profiles available to the current Windows user. If it is empty, open classic Outlook under the same Windows user and configure a profile, then click **Refresh profiles**. Check **Online** before logging on if you want to request server access rather than use the Outlook cache.
 
 1. Expand a mailbox store in the tree and select a folder.
 2. Set the inclusive final date and, optionally, an inclusive start date. Dates are in UTC.
@@ -21,6 +21,8 @@ Open the executable without arguments (or pass `--gui`). Select **Log on** with 
 4. If you want to remove the previewed messages, select **Move to Deleted Items** or **Hard delete** and confirm. Changing the folder or dates clears the preview. The desktop interface uses the IDs from that preview and does not include new matches that appeared after it.
 
 The status bar shows scan and deletion progress. Cancellation is checked between MAPI batches and cannot undo a completed batch.
+
+If an older build reports `IMAPISession::GetMsgStoresTable` with HRESULT `0x80040103` after logon, update to 0.7.1 Beta or later. The error indicates that the provider rejected the Unicode table flag, not that the profile name was incorrect. If logon succeeds but no stores appear, verify that classic Outlook opens a mailbox with the same profile and that any delegated mailbox is mounted in it.
 
 ## Command-line quick start
 

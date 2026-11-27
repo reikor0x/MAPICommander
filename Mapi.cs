@@ -57,6 +57,10 @@ internal static unsafe class Native
 
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [DllImport("mapi32.dll", ExactSpelling = true)]
+    internal static extern int MAPIAdminProfiles(uint flags, nint* admin);
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [DllImport("mapi32.dll", ExactSpelling = true)]
     internal static extern int MAPILogonEx(nuint ui, char* profile, char* password, uint flags, nint* session);
 
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
@@ -68,30 +72,57 @@ internal static unsafe class Mapi
 {
     internal const uint Unicode = 0x80000000;
     internal const int MutationBatchSize = 256;
+    internal const string NoStoresMessage = "No mailbox stores found. Verify that classic Outlook opens a mailbox with this profile, then try again.";
     private const int QueryBatchSize = 512;
     private const uint EntryId = 0x0FFF0102, DisplayName = 0x3001001F, DeliveryTime = 0x0E060040,
         MessageClass = 0x001A001F, IpmSubtree = 0x35E00102, IpmWastebasket = 0x35E30102, FolderType = 0x36010003;
     private const uint MapiModify = 1, MapiFolder = 3, FolderGeneric = 1;
+    private const uint DisplayNameAnsi = 0x3001001E, DefaultProfile = 0x3D04000B;
 
     // Vtable slots follow Microsoft's MAPIX.h and MAPIDefS.h, including inherited methods.
-    private const int GetMsgStoresTable = 4, OpenMsgStore = 5, GetProps = 5, StoreCompareEntryIds = 15,
+    private const int GetProfileTable = 4, GetMsgStoresTable = 4, OpenMsgStore = 5, GetProps = 5, StoreCompareEntryIds = 15,
         StoreOpenEntry = 16, GetContentsTable = 14, GetHierarchyTable = 15, CopyMessages = 20, DeleteMessages = 21,
         SetColumns = 7, Restrict = 14, QueryRows = 19;
 
     internal record NamedEntry(string Name, byte[] Id);
+    internal sealed record Profile(string Name, bool IsDefault);
 
     internal static void Check(int result, string operation)
     {
         if (result != 0) throw new MapiException(operation, result);
     }
 
+    internal static List<Profile> GetProfiles(CancellationToken cancellation)
+    {
+        cancellation.ThrowIfCancellationRequested();
+        nint adminPointer = 0;
+        Check(Native.MAPIAdminProfiles(0, &adminPointer), "MAPIAdminProfiles");
+        using var admin = new MapiObject(adminPointer);
+        nint tablePointer = 0;
+        var call = (delegate* unmanaged[Stdcall]<nint, uint, nint*, int>)admin.Method(GetProfileTable);
+        // The profile table exposes ANSI display names, even in a Unicode Outlook build.
+        Check(call(admin.Pointer, 0, &tablePointer), "IProfAdmin::GetProfileTable");
+        using var table = new MapiObject(tablePointer);
+        SelectColumns(table, [DisplayNameAnsi, DefaultProfile]);
+        var profiles = new List<Profile>();
+        ReadRows(table, row =>
+        {
+            var props = GetRowProperties(row, 2);
+            var name = ReadAnsiDisplayName(props[0]);
+            RequireTag(props[1], DefaultProfile, "PR_DEFAULT_PROFILE");
+            profiles.Add(new Profile(name, props[1].Value.Boolean != 0));
+        }, cancellation);
+        return profiles;
+    }
+
     internal static List<NamedEntry> GetStores(MapiObject session, CancellationToken cancellation)
     {
         nint table = 0;
         var call = (delegate* unmanaged[Stdcall]<nint, uint, nint*, int>)session.Method(GetMsgStoresTable);
-        Check(call(session.Pointer, Unicode, &table), "IMAPISession::GetMsgStoresTable");
+        // Some Outlook providers reject MAPI_UNICODE on the table itself but still expose PR_DISPLAY_NAME_W.
+        Check(call(session.Pointer, 0, &table), "IMAPISession::GetMsgStoresTable");
         using var handle = new MapiObject(table);
-        return ReadNames(handle, cancellation);
+        return ReadNames(handle, cancellation, allowAnsi: true);
     }
 
     internal static MapiObject OpenStore(MapiObject session, byte[] entryId, bool write, bool online)
@@ -267,15 +298,19 @@ internal static unsafe class Mapi
         return new MapiObject(table);
     }
 
-    private static List<NamedEntry> ReadNames(MapiObject table, CancellationToken cancellation)
+    private static List<NamedEntry> ReadNames(MapiObject table, CancellationToken cancellation, bool allowAnsi = false)
     {
-        SelectColumns(table, [DisplayName, EntryId]);
+        SelectColumns(table, allowAnsi ? [DisplayName, EntryId, DisplayNameAnsi] : [DisplayName, EntryId]);
         var names = new List<NamedEntry>();
         ReadRows(table, row =>
         {
-            var properties = GetRowProperties(row, 2);
-            names.Add(new NamedEntry(ReadText(properties[0], DisplayName, "PR_DISPLAY_NAME_W").ToString(),
-                ReadBinary(properties[1], EntryId, "PR_ENTRYID")));
+            var properties = GetRowProperties(row, allowAnsi ? 3u : 2u);
+            const uint displayNameError = 0x3001000A;
+            const int notFound = unchecked((int)0x8004010F), badCharWidth = unchecked((int)0x80040103);
+            var name = allowAnsi && properties[0].Tag == displayNameError && properties[0].Value.Number is notFound or badCharWidth
+                ? ReadAnsiDisplayName(properties[2])
+                : ReadText(properties[0], DisplayName, "PR_DISPLAY_NAME_W").ToString();
+            names.Add(new NamedEntry(name, ReadBinary(properties[1], EntryId, "PR_ENTRYID")));
         }, cancellation);
         return names;
     }
@@ -366,6 +401,13 @@ internal static unsafe class Mapi
         return MemoryMarshal.CreateReadOnlySpanFromNullTerminated(property.Value.Text);
     }
 
+    private static string ReadAnsiDisplayName(Prop property)
+    {
+        RequireTag(property, DisplayNameAnsi, "PR_DISPLAY_NAME_A");
+        var name = Marshal.PtrToStringAnsi(property.Value.Pointer);
+        return !string.IsNullOrEmpty(name) ? name : throw new InvalidOperationException("PR_DISPLAY_NAME_A: valore vuoto.");
+    }
+
     private static void RequireTag(Prop property, uint tag, string label)
     {
         if (property.Tag == tag) return;
@@ -381,6 +423,8 @@ internal static unsafe class Mapi
         [FieldOffset(0)] public Binary Binary;
         [FieldOffset(0)] public long FileTime;
         [FieldOffset(0)] public int Number;
+        [FieldOffset(0)] public ushort Boolean;
+        [FieldOffset(0)] public nint Pointer;
         [FieldOffset(0)] public char* Text;
     }
 

@@ -84,6 +84,7 @@ internal static class Program
         var stores = Mapi.GetStores(session, cancellation);
         if (options.Command == "stores")
         {
+            if (stores.Count == 0) Console.Error.WriteLine(Mapi.NoStoresMessage);
             foreach (var item in stores) Console.WriteLine(item.Name);
             return 0;
         }

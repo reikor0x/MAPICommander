@@ -1,7 +1,8 @@
 internal sealed class MailboxForm : Form
 {
     private readonly MailboxSession _session = new();
-    private readonly TextBox _profile = new() { Width = 150, MaxLength = 64, PlaceholderText = "Choose at logon" };
+    private readonly ComboBox _profile = new() { Width = 225, DropDownStyle = ComboBoxStyle.DropDownList, DisplayMember = nameof(Mapi.Profile.Name) };
+    private readonly Button _reloadProfiles = new() { Text = "Refresh profiles", AutoSize = true };
     private readonly CheckBox _online = new() { Text = "Online (at logon)", AutoSize = true };
     private readonly Button _connect = new() { Text = "Log on", AutoSize = true };
     private readonly TreeView _folders = new() { Dock = DockStyle.Fill, HideSelection = false, AccessibleName = "Stores and folders" };
@@ -31,8 +32,8 @@ internal sealed class MailboxForm : Form
         ClientSize = new Size(1030, 630);
         MinimumSize = new Size(820, 420);
         AutoScaleMode = AutoScaleMode.Dpi;
-        _status.Text = "Log on to a classic Outlook profile to browse stores and folders.";
-        _profile.AccessibleName = "Outlook profile (optional)";
+        _status.Text = "Select a classic Outlook profile to browse stores and folders.";
+        _profile.AccessibleName = "Outlook profile";
         _from.AccessibleName = "Received from UTC (optional)";
         _to.AccessibleName = "Received through UTC";
 
@@ -48,13 +49,21 @@ internal sealed class MailboxForm : Form
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        layout.Controls.Add(Bar(LabelFor("Outlook profile:"), _profile, _online, _connect), 0, 0);
+        layout.Controls.Add(Bar(LabelFor("Outlook profile:"), _profile, _reloadProfiles, _online, _connect), 0, 0);
         layout.Controls.Add(Bar(LabelFor("Received from (UTC):"), _from, LabelFor("Through (inclusive):"), _to, _preview), 0, 1);
         layout.Controls.Add(split, 0, 2);
         layout.Controls.Add(Bar(_export, _move, _hardDelete, _cancel), 0, 3);
         layout.Controls.Add(new StatusStrip { Dock = DockStyle.Fill, SizingGrip = false, Items = { _status, _progress } }, 0, 4);
         Controls.Add(layout);
 
+        Shown += async (_, _) => await LoadProfilesAsync();
+        _reloadProfiles.Click += async (_, _) => await LoadProfilesAsync();
+        _profile.SelectedIndexChanged += (_, _) => UpdateCommands();
+        _profile.SelectionChangeCommitted += (_, _) =>
+        {
+            ResetBrowser();
+            _status.Text = "Click Log on to browse the selected Outlook profile.";
+        };
         _connect.Click += async (_, _) => await ConnectAsync();
         _folders.BeforeExpand += async (_, e) =>
         {
@@ -117,19 +126,34 @@ internal sealed class MailboxForm : Form
 
     private MailboxSession.Target? SelectedFolder => _folders.SelectedNode?.Tag is MailboxSession.Target { FolderId: not null } target ? target : null;
 
+    private Task LoadProfilesAsync() => ExecuteAsync("Reading Outlook profiles", async token =>
+    {
+        var previous = (_profile.SelectedItem as Mapi.Profile)?.Name;
+        ResetBrowser();
+        _profile.Items.Clear();
+        var profiles = await _session.ProfilesAsync(token);
+        profiles.Sort((left, right) => StringComparer.CurrentCultureIgnoreCase.Compare(left.Name, right.Name));
+        _profile.Items.AddRange(profiles.ToArray());
+        var selected = profiles.FindIndex(profile => profile.Name.Equals(previous, StringComparison.Ordinal));
+        if (selected < 0) selected = profiles.FindIndex(profile => profile.IsDefault);
+        _profile.SelectedIndex = selected < 0 && profiles.Count == 1 ? 0 : selected;
+        _status.Text = profiles.Count == 0
+            ? "No Outlook profiles found. Open classic Outlook as this Windows user, then select Refresh profiles."
+            : "Select an Outlook profile and click Log on.";
+    });
+
     private Task ConnectAsync()
     {
-        _folders.Nodes.Clear();
-        ClearReport();
-        var profile = string.IsNullOrWhiteSpace(_profile.Text) ? null : _profile.Text;
+        if (_profile.SelectedItem is not Mapi.Profile profile) return Task.CompletedTask;
+        ResetBrowser();
         var online = _online.Checked;
         var owner = Handle;
         return ExecuteAsync("Logging on", async token =>
         {
-            var stores = await _session.ConnectAsync(profile, online, owner, token);
+            var stores = await _session.ConnectAsync(profile.Name, online, owner, token);
             foreach (var store in stores)
                 _folders.Nodes.Add(CreateNode(store.Name, new MailboxSession.Target(store.Id, FolderId: null)));
-            _status.Text = stores.Count == 0 ? "No stores found in this profile." : "Expand a store and select a mail folder.";
+            _status.Text = stores.Count == 0 ? Mapi.NoStoresMessage : "Expand a store and select a mail folder.";
         });
     }
 
@@ -264,10 +288,18 @@ internal sealed class MailboxForm : Form
         UpdateCommands();
     }
 
+    private void ResetBrowser()
+    {
+        _folders.Nodes.Clear();
+        ClearReport();
+    }
+
     private void UpdateCommands()
     {
         var idle = _operation is null && !_closing;
-        _profile.Enabled = _online.Enabled = _connect.Enabled = _folders.Enabled = _from.Enabled = _to.Enabled = idle;
+        _reloadProfiles.Enabled = _online.Enabled = _folders.Enabled = _from.Enabled = _to.Enabled = idle;
+        _profile.Enabled = idle && _profile.Items.Count > 0;
+        _connect.Enabled = idle && _profile.SelectedItem is Mapi.Profile;
         _preview.Enabled = idle && SelectedFolder is not null;
         _export.Enabled = _move.Enabled = _hardDelete.Enabled = _preview.Enabled && _report.Count > 0;
         _cancel.Enabled = _operation is { IsCancellationRequested: false };

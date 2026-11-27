@@ -46,7 +46,13 @@ internal sealed class MailboxSession
         return await dispatcher.InvokeAsync(action);
     }
 
-    public Task<List<Mapi.NamedEntry>> ConnectAsync(string? profile, bool online, nint owner, CancellationToken token) => InvokeAsync(() =>
+    public Task<List<Mapi.Profile>> ProfilesAsync(CancellationToken token) => InvokeAsync(() =>
+    {
+        using var runtime = _runtime is null ? new MapiRuntime() : null;
+        return Mapi.GetProfiles(token);
+    });
+
+    public Task<List<Mapi.NamedEntry>> ConnectAsync(string profile, bool online, nint owner, CancellationToken token) => InvokeAsync(() =>
     {
         Disconnect();
         _runtime = new MapiRuntime();
