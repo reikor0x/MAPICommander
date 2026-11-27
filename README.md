@@ -1,5 +1,7 @@
 # MAPICommander 0.9 Beta
 
+[![Donate with PayPal](https://img.shields.io/badge/Donate-PayPal-0070BA?logo=paypal&style=for-the-badge)](https://www.paypal.com/donate/?business=KWBLR2XJML5KY&no_recurring=0&currency_code=EUR)
+
 MAPICommander is a Windows tool for counting, listing, and removing email from Exchange. The desktop interface can search one folder, a folder and its subfolders, or an entire mailbox. The CLI works on one folder at a time. Both use the existing classic Outlook profile through Extended MAPI, not EWS, and do not require an Entra app registration.
 
 > **Beta software.** MAPICommander is provided **as is**, without warranty of any kind, express or implied. There is no guarantee that it will work correctly or that it is suitable for your environment. Test it on a disposable folder and review a read-only preview before deleting anything. Hard-deleted messages may not be recoverable.
