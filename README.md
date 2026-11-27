@@ -1,4 +1,4 @@
-# MAPICommander 0.8 Beta
+# MAPICommander 0.8.1 Beta
 
 MAPICommander is a Windows tool for counting, listing, and removing email from Exchange. The desktop interface can search one folder, a folder and its subfolders, or an entire mailbox. The CLI works on one folder at a time. Both use the existing classic Outlook profile through Extended MAPI, not EWS, and do not require an Entra app registration.
 

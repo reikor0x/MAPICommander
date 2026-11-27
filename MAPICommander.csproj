@@ -5,7 +5,8 @@
     <TargetFramework>net10.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <DisableWinExeOutputInference>true</DisableWinExeOutputInference>
-    <Version>0.8.0-beta</Version>
+    <ApplicationIcon>MAPICommander.ico</ApplicationIcon>
+    <Version>0.8.1-beta</Version>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -17,6 +18,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="$(ApplicationIcon)" LogicalName="MAPICommander.AppIcon" />
     <EmbeddedResource Include="GuiTranslations.txt" LogicalName="MAPICommander.GuiTranslations" />
   </ItemGroup>
 

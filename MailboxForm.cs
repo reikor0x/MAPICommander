@@ -8,6 +8,8 @@ internal sealed class MailboxForm : Form
     private readonly ToolStripMenuItem _options = new();
     private readonly ToolStripMenuItem _language = new();
     private readonly ToolStripLabel _version = new() { Alignment = ToolStripItemAlignment.Right };
+    private readonly Icon _appIcon;
+    private readonly Bitmap _versionIcon;
     private readonly Label _profileLabel = LabelFor();
     private readonly Label _fromLabel = LabelFor();
     private readonly Label _toLabel = LabelFor();
@@ -55,6 +57,13 @@ internal sealed class MailboxForm : Form
         ClientSize = new Size(1030, 630);
         MinimumSize = new Size(820, 420);
         AutoScaleMode = AutoScaleMode.Dpi;
+        using var iconStream = typeof(MailboxForm).Assembly.GetManifestResourceStream("MAPICommander.AppIcon")
+            ?? throw new InvalidOperationException("The application icon resource is missing.");
+        _appIcon = new Icon(iconStream);
+        Icon = _appIcon;
+        using var menuIcon = new Icon(_appIcon, SystemInformation.SmallIconSize);
+        _versionIcon = menuIcon.ToBitmap();
+        _version.Image = _versionIcon;
         _headingFont = new Font(Font, FontStyle.Bold);
         _scopeBanner.Font = _headingFont;
         _scopeBanner.Height = 36;
@@ -565,6 +574,8 @@ internal sealed class MailboxForm : Form
         {
             _refresh.Dispose();
             _headingFont.Dispose();
+            _versionIcon.Dispose();
+            _appIcon.Dispose();
         }
     }
 

@@ -6,6 +6,10 @@ This history was reconstructed from the repository's release tags and commits. C
 
 No unreleased changes yet.
 
+## [0.8.1 Beta](https://github.com/reikor0x/MAPICommander/releases/tag/v0.8.1-beta)
+
+- Added a custom mail icon to the executable, window, Windows taskbar, and version label.
+
 ## [0.8.0 Beta](https://github.com/reikor0x/MAPICommander/releases/tag/v0.8.0-beta)
 
 ### Added
