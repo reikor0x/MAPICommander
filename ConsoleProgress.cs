@@ -45,7 +45,7 @@ internal sealed class ConsoleProgress : IDisposable
         {
             var position = _frame++ % Width;
             bar = complete ? new string('#', Width) : new string('-', position) + '>' + new string('-', Width - position - 1);
-            detail = $"{processed} corrispondenze";
+            detail = $"{processed} matches";
         }
 
         var line = $"{_label} [{bar}] {detail}";

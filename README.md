@@ -1,8 +1,10 @@
-# MAPICommander 0.7.4 Beta
+# MAPICommander 0.8 Beta
 
-MAPICommander is a Windows tool for counting, listing, and removing email from a single Exchange mailbox folder. The same executable provides a desktop mailbox browser and a command-line interface. Both use the existing classic Outlook profile through Extended MAPI, not EWS, and do not require an Entra app registration.
+MAPICommander is a Windows tool for counting, listing, and removing email from Exchange. The desktop interface can search one folder, a folder and its subfolders, or an entire mailbox. The CLI works on one folder at a time. Both use the existing classic Outlook profile through Extended MAPI, not EWS, and do not require an Entra app registration.
 
 > **Beta software.** MAPICommander is provided **as is**, without warranty of any kind, express or implied. There is no guarantee that it will work correctly or that it is suitable for your environment. Test it on a disposable folder and review a read-only preview before deleting anything. Hard-deleted messages may not be recoverable.
+
+See the [changelog](CHANGELOG.md) for the release history and unreleased changes.
 
 ## Download and requirements
 
@@ -13,18 +15,22 @@ Download the self-contained Windows executable from [GitHub Releases](https://gi
 
 ## Desktop interface
 
-Open the executable without arguments (or pass `--gui`). Select a profile from the **Outlook profile** drop-down and click **Log on**. The list contains the classic Outlook profiles available to the current Windows user. If it is empty, open classic Outlook under the same Windows user and configure a profile, then click **Refresh profiles**. Check **Online** before logging on if you want to request server access rather than use the Outlook cache.
+Open the executable without arguments (or pass `--gui`). Select a profile from the **Outlook profile** drop-down and click **Log on**. The list contains the classic Outlook profiles available to the current Windows user. If it is empty, open classic Outlook under the same Windows user and configure a profile, then click **Refresh profiles**. Check **Online mode no cache** before logging on if you want to request server access rather than use the Outlook cache.
 
-1. Expand a mailbox store in the tree and select a folder.
-2. Set the inclusive final date and, optionally, an inclusive start date. Dates are in UTC.
-3. Select **Preview** to scan without changing the mailbox. The list shows only received time and EntryID; **Export TSV** saves the report.
-4. If you want to remove the previewed messages, select **Move to Deleted Items** or **Hard delete** and confirm. Changing the folder or dates clears the preview. The desktop interface uses the IDs from that preview and does not include new matches that appeared after it.
+The current version is displayed at the top right. Under **Options → Language**, choose English (the default), Italian, French, German, or Spanish. The interface updates immediately and remembers your choice for your Windows user. The command line and MAPI diagnostic identifiers remain in English; Windows and Outlook may use their own language in system dialogs.
 
-The status bar shows scan and deletion progress. The GUI uses the same MAPI store for preview and removal, and requests write access to the exact previewed folder only after confirmation. A read-only mailbox can still be previewed. If the operation stops before a removal batch is submitted, no messages were changed by that attempt. After submission, a failed batch may have changed the mailbox even if zero messages are confirmed. Cancellation cannot undo completed changes; run a fresh preview before retrying.
+1. Select a folder to search only that folder. Check **Include subfolders** to also search its nested folders, without including sibling folders. For a mailbox-wide search, select a mailbox or any of its folders and check **Entire mailbox** instead. The app warns before scanning the whole mailbox. Search folders, hidden items, and separate archive stores are not included. The banner shows the active scope and stays highlighted while the tree is locked during an operation.
+2. With **Filter by date** checked, set the inclusive final date and, optionally, an inclusive start date. Dates are in UTC. Uncheck **Filter by date** to search across all dates. Check **Largest first** to display message size in bytes and sort from largest to smallest, with unavailable sizes last. This works with either search scope and with or without a date filter.
+3. Select **Preview** to search without changing the mailbox. Results show the subject, received time, source folder, EntryID, and size if requested. The subject is read from the MAPI table without opening the message and is only shown in the GUI. **Export TSV** saves the other result fields but omits the subject.
+4. Select **Move to Deleted Items** or **Hard delete**, then choose **All previewed messages**, **Only highlighted messages**, or **Cancel**. Use Ctrl or Shift to highlight multiple rows. Changing the folder or search options clears the preview. Removal uses only the chosen preview rows, even across multiple folders; it never includes new matches. If the chosen rows include messages already in Deleted Items, the move is refused before any messages are changed.
+
+The full-width progress bar shows a percentage when a total is available. Subfolder and mailbox-wide search progress is based on folders scanned, not messages; folder sizes can vary. The bar is indeterminate while discovering folders or if MAPI cannot count rows. When a search succeeds, the bar disappears and the status line shows **Search ended** and the match count.
+
+The GUI uses the same MAPI store for preview and removal, and requests write access to source folders only after confirmation. A read-only mailbox can still be previewed. If the operation stops before a removal batch is submitted, no messages were changed by that attempt. After submission, a failed batch may have changed the mailbox even if zero messages are confirmed. Cancellation cannot undo completed changes; run a fresh preview before retrying.
 
 If an older build reports `IMAPISession::GetMsgStoresTable` with HRESULT `0x80040103` after logon, update to 0.7.1 Beta or later. The error indicates that the provider rejected the Unicode table flag, not that the profile name was incorrect. If logon succeeds but no stores appear, verify that classic Outlook opens a mailbox with the same profile and that any delegated mailbox is mounted in it.
 
-If 0.7.1 Beta reports `IMsgStore::OpenEntry` with HRESULT `0x80040106` when expanding a mailbox, update to 0.7.2 Beta or later. This error was caused by an incorrect native MAPI method binding, not by the **Online** option.
+If 0.7.1 Beta reports `IMsgStore::OpenEntry` with HRESULT `0x80040106` when expanding a mailbox, update to 0.7.2 Beta or later. This error was caused by an incorrect native MAPI method binding, not by the **Online mode no cache** option.
 
 If an older build reports `0x80040107` when opening or previewing a subfolder, try 0.7.3 Beta or later. It reuses the browsing store and retries the exact folder EntryID through its parent if the store rejects it. It does not switch from online to cached mode or choose a folder by name. If both calls fail, the dialog reports both MAPI results.
 
@@ -74,8 +80,8 @@ In an interactive terminal, the scan shows a progress bar and a running match co
 
 After reviewing the preview, rerun the command without `--whatif` and without the report redirection. The tool scans again; the preview is not a snapshot or a lock on the mailbox.
 
-- **`--delete`** moves matches to Deleted Items in the same mailbox. Type `SPOSTA` at the confirmation prompt.
-- **`--hard-delete`** bypasses Deleted Items. Type `ELIMINA DEFINITIVAMENTE` at the confirmation prompt. Exchange retention and hold policies still apply; hard delete does not guarantee immediate server-side erasure.
+- **`--delete`** moves matches to Deleted Items in the same mailbox. Type `MOVE` at the confirmation prompt.
+- **`--hard-delete`** bypasses Deleted Items. Type `HARD DELETE` at the confirmation prompt. Exchange retention and hold policies still apply; hard delete does not guarantee immediate server-side erasure.
 - **`--yes`** skips interactive confirmation, including for hard delete. Use only when intentionally running unattended. It cannot be combined with `--whatif`.
 
 Deletion is not atomic. An error or Ctrl+C may leave some messages already moved or deleted. Rerun a read-only scan before retrying. To validate the tool with your Outlook build and Exchange configuration, start with a test folder containing messages before, on, and after your date boundaries, and a message in a subfolder that should not match.

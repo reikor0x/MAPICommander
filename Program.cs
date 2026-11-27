@@ -52,13 +52,13 @@ internal static class Program
         }
         catch (OperationCanceledException)
         {
-            Console.Error.WriteLine("Operazione annullata.");
+            Console.Error.WriteLine("Operation cancelled.");
             return 130;
         }
         catch (Exception e) when (e is MapiException or InvalidOperationException or IOException
             or DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
         {
-            Console.Error.WriteLine($"Errore: {e.Message}");
+            Console.Error.WriteLine($"Error: {e.Message}");
             return 1;
         }
         finally
@@ -74,10 +74,10 @@ internal static class Program
     private static int Run(Options options, CancellationToken cancellation)
     {
         if (!OperatingSystem.IsWindows() || RuntimeInformation.ProcessArchitecture is not (Architecture.X64 or Architecture.X86))
-            throw new InvalidOperationException("Serve Windows con Outlook classico e un processo x86/x64 della stessa architettura di Outlook.");
+            throw new InvalidOperationException("Windows and classic Outlook are required. Use the x86 or x64 executable that matches Outlook's architecture.");
 
         if (options.Writes && !options.Yes && Console.IsInputRedirected)
-            throw new InvalidOperationException("Con input reindirizzato, la cancellazione richiede anche --yes.");
+            throw new InvalidOperationException("Removal with redirected input requires --yes.");
 
         using var mapi = new MapiRuntime();
         using var session = mapi.Logon(options.Profile);
@@ -89,7 +89,7 @@ internal static class Program
             return 0;
         }
 
-        var selected = Mapi.FindUnique(stores, options.Store!, "Store", "Usa il comando stores e verifica il profilo Outlook.");
+        var selected = Mapi.FindUnique(stores, options.Store!, "Store", "Run the stores command and check the Outlook profile.");
         using var store = Mapi.OpenStore(session, selected.Id, options.Writes ? Mapi.StoreAccess.Write : Mapi.StoreAccess.ReadOnly, options.Online);
         using var folder = Mapi.ResolveFolder(store, options.Folder, options.Writes, cancellation);
         if (options.Command == "folders")
@@ -99,19 +99,19 @@ internal static class Program
         }
 
         var before = options.Before!.Value;
-        var from = options.From is { } start ? $" | Da (incluso): {start:O}" : "";
-        Console.Error.WriteLine($"Store: {selected.Name} | Cartella: {options.Folder}{from} | Prima di: {before:O}");
+        var from = options.From is { } start ? $" | From (inclusive): {start:O}" : "";
+        Console.Error.WriteLine($"Store: {selected.Name} | Folder: {options.Folder}{from} | Before: {before:O}");
         if (options.WhatIf)
             Console.Error.WriteLine(options.Action == DeleteMode.Hard
-                ? "WHATIF: anteprima hard delete. Nessuna modifica."
-                : "WHATIF: anteprima spostamento in Posta eliminata. Nessuna modifica.");
+                ? "WHATIF: hard-delete preview. No changes made."
+                : "WHATIF: move to Deleted Items preview. No changes made.");
         List<byte[]>? ids = options.Writes ? [] : null;
         var list = options.List || options.WhatIf;
         if (list) Console.WriteLine("received_utc\tentry_id_hex");
         var timer = Stopwatch.StartNew();
         var progressOutput = Console.IsErrorRedirected ? null : Console.Error;
         long count;
-        using (var progress = new ConsoleProgress(progressOutput, "Scansione", inline: !list || Console.IsOutputRedirected))
+        using (var progress = new ConsoleProgress(progressOutput, "Scanning", inline: !list || Console.IsOutputRedirected))
         {
             Action<long>? report = progressOutput is null ? null : progress.Report;
             Action<long, byte[]>? record = !list && ids is null ? null : (received, id) =>
@@ -122,7 +122,7 @@ internal static class Program
             count = Mapi.Scan(folder, options.From?.ToFileTime(), before.ToFileTime(), record, cancellation, report);
             progress.Complete(count);
         }
-        Console.Error.WriteLine($"Corrispondenze: {count} ({timer.Elapsed.TotalSeconds:F2} s)");
+        Console.Error.WriteLine($"Matches: {count} ({timer.Elapsed.TotalSeconds:F2} s)");
         if (!list) Console.WriteLine(count);
         if (ids is null || ids.Count == 0) return 0;
 
@@ -130,9 +130,9 @@ internal static class Program
         using var trash = hardDelete ? null : Mapi.OpenTrash(store, folder);
         if (!options.Yes)
         {
-            var confirmation = hardDelete ? "ELIMINA DEFINITIVAMENTE" : "SPOSTA";
-            var action = hardDelete ? "Eliminare senza passare da Posta eliminata" : "Spostare in Posta eliminata";
-            Console.Error.Write($"{action} {count} messaggi? Scrivi {confirmation} per confermare: ");
+            var confirmation = hardDelete ? "HARD DELETE" : "MOVE";
+            var action = hardDelete ? "Hard-delete" : "Move to Deleted Items";
+            Console.Error.Write($"{action} ({count} messages)? Type {confirmation} to confirm: ");
             if (Console.ReadLine() != confirmation) throw new OperationCanceledException();
         }
 
@@ -140,7 +140,7 @@ internal static class Program
         timer.Restart();
         try
         {
-            using var progress = new ConsoleProgress(progressOutput, hardDelete ? "Hard delete" : "Spostamento", inline: true, ids.Count);
+            using var progress = new ConsoleProgress(progressOutput, hardDelete ? "Hard deleting" : "Moving", inline: true, ids.Count);
             while (processed < ids.Count)
             {
                 cancellation.ThrowIfCancellationRequested();
@@ -155,13 +155,13 @@ internal static class Program
         }
         catch (MapiException)
         {
-            Console.Error.WriteLine("Il blocco interrotto potrebbe essere stato applicato parzialmente. Riesegui scan prima di riprovare.");
+            Console.Error.WriteLine("An interrupted batch may have been partially applied. Run scan again before retrying.");
             throw;
         }
         finally
         {
-            var operation = hardDelete ? "Hard delete" : "Spostamenti";
-            Console.Error.WriteLine($"{operation} confermati da MAPI: {processed}/{count} ({timer.Elapsed.TotalSeconds:F2} s)");
+            var operation = hardDelete ? "Hard deletes" : "Moves";
+            Console.Error.WriteLine($"{operation} confirmed by MAPI: {processed}/{count} ({timer.Elapsed.TotalSeconds:F2} s)");
         }
 
         return 0;
@@ -179,7 +179,7 @@ internal static class Program
         {
             var command = args[0];
             if (command is not ("stores" or "folders" or "scan"))
-                throw new ArgumentException($"Comando sconosciuto: {command}");
+                throw new ArgumentException($"Unknown command: {command}");
 
             var values = new Dictionary<string, string?>(StringComparer.Ordinal);
             for (var i = 1; i < args.Length; i++)
@@ -189,10 +189,10 @@ internal static class Program
                 var allowed = key == "--profile" || (command != "stores" && key is "--store" or "--folder" or "--online")
                     || (command == "scan" && key is "--from" or "--before" or "--to" or "--list" or "--delete" or "--hard-delete" or "--whatif" or "--yes");
                 if (!allowed || !values.TryAdd(key, null))
-                    throw new ArgumentException($"Opzione non valida o duplicata: {key}");
+                    throw new ArgumentException($"Invalid or duplicate option: {key}");
                 if (!takesValue) continue;
                 if (++i >= args.Length || string.IsNullOrWhiteSpace(args[i]) || args[i].StartsWith("--", StringComparison.Ordinal))
-                    throw new ArgumentException($"Manca il valore di {key}.");
+                    throw new ArgumentException($"Missing value for {key}.");
                 values[key] = args[i];
             }
 
@@ -204,14 +204,14 @@ internal static class Program
             var hardDelete = values.ContainsKey("--hard-delete");
             var whatIf = values.ContainsKey("--whatif");
             var yes = values.ContainsKey("--yes");
-            if (command != "stores" && store is null) throw new ArgumentException("Specifica --store.");
-            if (command == "scan" && folder is null) throw new ArgumentException("Specifica --folder.");
-            if (profile?.Length > 64) throw new ArgumentException("Il profilo non puo superare 64 caratteri.");
+            if (command != "stores" && store is null) throw new ArgumentException("Specify --store.");
+            if (command == "scan" && folder is null) throw new ArgumentException("Specify --folder.");
+            if (profile?.Length > 64) throw new ArgumentException("The profile name cannot exceed 64 characters.");
             if (folder is not null && folder.Split('\\').Any(string.IsNullOrWhiteSpace))
-                throw new ArgumentException("Il percorso deve essere relativo alla radice della posta e non avere segmenti vuoti.");
-            if (delete && hardDelete) throw new ArgumentException("Scegli --delete oppure --hard-delete, non entrambi.");
-            if (yes && whatIf) throw new ArgumentException("--whatif e --yes non sono combinabili.");
-            if (yes && !delete && !hardDelete) throw new ArgumentException("--yes richiede --delete oppure --hard-delete.");
+                throw new ArgumentException("The path must be relative to the mail root and have no empty segments.");
+            if (delete && hardDelete) throw new ArgumentException("Choose either --delete or --hard-delete, not both.");
+            if (yes && whatIf) throw new ArgumentException("--whatif and --yes cannot be combined.");
+            if (yes && !delete && !hardDelete) throw new ArgumentException("--yes requires --delete or --hard-delete.");
 
             DateTimeOffset? from = null;
             DateTimeOffset? before = null;
@@ -220,18 +220,18 @@ internal static class Program
                 var beforeText = values.GetValueOrDefault("--before");
                 var toText = values.GetValueOrDefault("--to");
                 if ((beforeText is null) == (toText is null))
-                    throw new ArgumentException("Specifica esattamente uno tra --before e --to.");
+                    throw new ArgumentException("Specify exactly one of --before and --to.");
 
                 if (values.GetValueOrDefault("--from") is { } fromText) from = ParseInstant(fromText, "--from");
                 if (toText is not null)
                 {
                     if (!TryParseDate(toText, out var to) || to == DateOnly.MaxValue || to.Year < 1601)
-                        throw new ArgumentException("Specifica una data --to valida, senza orario, dal 1601-01-01 al 9999-12-30.");
+                        throw new ArgumentException("Specify a valid --to date without a time, from 1601-01-01 to 9999-12-30.");
                     before = AtUtcMidnight(to.AddDays(1));
                 }
                 else before = ParseInstant(beforeText!, "--before");
 
-                if (from >= before) throw new ArgumentException("L'inizio dell'intervallo deve precedere il limite superiore esclusivo.");
+                if (from >= before) throw new ArgumentException("The start of the range must precede the exclusive upper bound.");
             }
 
             var action = hardDelete ? DeleteMode.Hard : delete ? DeleteMode.Move : DeleteMode.None;
@@ -249,9 +249,9 @@ internal static class Program
             if (TryParseDate(text, out var date)) parsed = AtUtcMidnight(date);
             else if (!DateTimeOffset.TryParseExact(text, ["yyyy-MM-dd'T'HH:mm:ss'Z'", "yyyy-MM-dd'T'HH:mm:sszzz"],
                 CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out parsed))
-                throw new ArgumentException($"Specifica una data {option} valida.");
+                throw new ArgumentException($"Specify a valid {option} date.");
             if (parsed <= DateTimeOffset.FromFileTime(0))
-                throw new ArgumentException($"La data {option} deve essere successiva al 1601-01-01 UTC.");
+                throw new ArgumentException($"The {option} date must be after 1601-01-01 UTC.");
             return parsed;
         }
     }

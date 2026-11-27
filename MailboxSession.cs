@@ -1,8 +1,10 @@
 internal sealed class MailboxSession
 {
     internal sealed record Target(byte[] StoreId, byte[]? FolderId, Target? Parent = null);
-    internal sealed record Row(long Received, byte[] Id);
-    internal sealed record Preview(Target Target, byte[] FolderId, IReadOnlyList<Row> Rows);
+    internal sealed record Source(byte[] Id, string Path);
+    internal sealed record Row(long Received, byte[] Id, uint? Size, string Subject, Source Source);
+    internal sealed record Preview(Target Target, bool IncludesSize, IReadOnlyList<Row> Rows);
+    internal enum SearchScope { Folder, Subtree, Mailbox }
 
     private readonly TaskCompletionSource<Control> _dispatcher = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _stopped = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -79,43 +81,132 @@ internal sealed class MailboxSession
         return Mapi.GetChildren(folder, token);
     });
 
-    public Task<Preview> PreviewAsync(Target target, long? from, long before, Action<long> progress, CancellationToken token) => InvokeAsync(() =>
+    public Task<Preview> PreviewAsync(Target target, string path, SearchScope scope, long? from, long? before, bool largest,
+        Action<long> progress, Action<int?> percentage, CancellationToken token) => InvokeAsync(() =>
     {
         _currentPreview = null;
+        if (scope == SearchScope.Mailbox ? target.FolderId is not null : target.FolderId is null)
+            throw new InvalidOperationException("The selected target does not match the search scope.");
         var store = GetBrowseStore(target);
-        using var folder = OpenTargetFolder(store, target, token);
-        Mapi.EnsureNormalFolder(folder);
-        // Read the long-term EntryID from the opened folder, not the hierarchy row.
-        var folderId = Mapi.GetFolderEntryId(folder);
+        using var root = OpenTargetFolder(store, target, token);
+        var rootIsNormal = Mapi.IsNormalFolder(root);
+        if (!rootIsNormal && scope != SearchScope.Mailbox) Mapi.EnsureNormalFolder(root);
+        var rootSource = new Source(Mapi.GetFolderEntryId(root), path);
         var rows = new List<Row>();
-        Mapi.Scan(folder, from, before, (received, id) => rows.Add(new Row(received, id)), token, progress);
-        return _currentPreview = new Preview(target, folderId, rows);
+
+        void ScanFolder(MapiObject folder, Source source, Action<long, uint?>? rowProgress)
+        {
+            var previous = rows.Count;
+            Mapi.ScanPreview(folder, from, before, largest, (received, id, size, subject) => rows.Add(new Row(received, id, size, subject, source)),
+                token, count => progress(previous + count), rowProgress);
+        }
+
+        if (scope != SearchScope.Folder)
+        {
+            var sources = DiscoverFolders(store, root, rootSource, rootIsNormal, token);
+            for (var i = 0; i < sources.Count; i++)
+            {
+                token.ThrowIfCancellationRequested();
+                percentage((int)(i * 100L / sources.Count));
+                var source = sources[i];
+                if (ReferenceEquals(source, rootSource))
+                {
+                    ScanFolder(root, source, null);
+                    continue;
+                }
+                using var folder = Mapi.OpenFolder(store, source.Id, write: false);
+                Mapi.EnsureNormalFolder(folder);
+                ScanFolder(folder, source, null);
+            }
+        }
+        else
+        {
+            ScanFolder(root, rootSource, (examined, total) =>
+                percentage(total is null ? null : total == 0 ? 0 : (int)Math.Min(99, examined * 100 / total.Value)));
+        }
+
+        token.ThrowIfCancellationRequested();
+        if (largest) rows.Sort((left, right) => Nullable.Compare(right.Size, left.Size));
+        token.ThrowIfCancellationRequested();
+        return _currentPreview = new Preview(target, largest, rows);
     });
 
-    public Task<int> RemoveAsync(Preview preview, bool hard, Action onFirstBatch, Action<long> progress, CancellationToken token) => InvokeAsync(() =>
+    private static List<Source> DiscoverFolders(MapiObject store, MapiObject root, Source rootSource, bool includeRoot, CancellationToken token)
+    {
+        var sources = new List<Source>();
+        var seen = new HashSet<string>(StringComparer.Ordinal) { Convert.ToHexString(rootSource.Id) };
+        if (includeRoot) sources.Add(rootSource);
+
+        void VisitChildren(MapiObject parent, string parentPath)
+        {
+            foreach (var child in Mapi.GetChildren(parent, token))
+            {
+                token.ThrowIfCancellationRequested();
+                using var folder = Mapi.OpenChildFolder(store, parent, child.Id, write: false);
+                if (!Mapi.IsNormalFolder(folder)) continue;
+                var id = Mapi.GetFolderEntryId(folder);
+                if (!seen.Add(Convert.ToHexString(id))) continue;
+                var childPath = $"{parentPath}\\{child.Name}";
+                sources.Add(new Source(id, childPath));
+                VisitChildren(folder, childPath);
+            }
+        }
+
+        VisitChildren(root, rootSource.Path);
+        return sources;
+    }
+
+    public Task<int> RemoveAsync(Preview preview, IReadOnlyList<int>? selectedIndices, bool hard, Action onFirstBatch,
+        Action<long> progress, CancellationToken token) => InvokeAsync(() =>
     {
         token.ThrowIfCancellationRequested();
         if (!ReferenceEquals(preview, _currentPreview) || !_browseStores.TryGetValue(preview.Target.StoreId, out var store))
             throw new InvalidOperationException("The preview is no longer current. Run Preview again before removing messages.");
         _currentPreview = null;
-        var rows = preview.Rows;
-        using var source = Mapi.OpenFolder(store, preview.FolderId, write: true);
-        Mapi.EnsureNormalFolder(source);
-        using var destination = hard ? null : Mapi.OpenTrash(store, source);
-        var batch = new byte[Math.Min(rows.Count, Mapi.MutationBatchSize)][];
-        for (var offset = 0; offset < rows.Count;)
+        var groups = new Dictionary<Source, List<byte[]>>(ReferenceEqualityComparer.Instance);
+        var count = selectedIndices?.Count ?? preview.Rows.Count;
+        for (var i = 0; i < count; i++)
         {
-            var length = Math.Min(batch.Length, rows.Count - offset);
-            for (var i = 0; i < length; i++) batch[i] = rows[offset + i].Id;
             token.ThrowIfCancellationRequested();
-            var onSubmit = offset == 0 ? onFirstBatch : null;
-            if (destination is null) Mapi.HardDelete(source, batch.AsSpan(0, length), onSubmit);
-            else Mapi.Move(source, destination, batch.AsSpan(0, length), onSubmit);
-            offset += length;
-            progress(offset);
+            var row = preview.Rows[selectedIndices is null ? i : selectedIndices[i]];
+            if (!groups.TryGetValue(row.Source, out var ids)) groups.Add(row.Source, ids = []);
+            ids.Add(row.Id);
+        }
+        if (count == 0) return 0;
+
+        var trashId = hard ? null : Mapi.GetTrashEntryId(store);
+        if (trashId is not null)
+        {
+            foreach (var source in groups.Keys)
+            {
+                token.ThrowIfCancellationRequested();
+                if (Mapi.SameEntry(store, source.Id, trashId))
+                    throw new InvalidOperationException("The removal selection includes messages already in Deleted Items. Select only messages from other folders to move them.");
+            }
         }
 
-        return rows.Count;
+        using var destination = trashId is null ? null : Mapi.OpenFolder(store, trashId, write: true);
+        var batch = new byte[Math.Min(count, Mapi.MutationBatchSize)][];
+        var confirmed = 0;
+        foreach (var (group, ids) in groups)
+        {
+            token.ThrowIfCancellationRequested();
+            using var source = Mapi.OpenFolder(store, group.Id, write: true);
+            Mapi.EnsureNormalFolder(source);
+            for (var offset = 0; offset < ids.Count;)
+            {
+                var length = Math.Min(batch.Length, ids.Count - offset);
+                ids.CopyTo(offset, batch, 0, length);
+                token.ThrowIfCancellationRequested();
+                var onSubmit = confirmed == 0 ? onFirstBatch : null;
+                if (destination is null) Mapi.HardDelete(source, batch.AsSpan(0, length), onSubmit);
+                else Mapi.Move(source, destination, batch.AsSpan(0, length), onSubmit);
+                confirmed += length;
+                offset += length;
+                progress(confirmed);
+            }
+        }
+        return confirmed;
     });
 
     private MapiObject GetBrowseStore(Target target)

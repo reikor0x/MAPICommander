@@ -11,7 +11,7 @@ internal sealed unsafe class MapiObject : IDisposable
     public nint Pointer { get; private set; }
 
     public MapiObject(nint pointer) => Pointer = pointer != 0 ? pointer
-        : throw new InvalidOperationException("MAPI non ha restituito l'interfaccia richiesta.");
+        : throw new InvalidOperationException("MAPI did not return the requested interface.");
 
     public nint Method(int slot) => (*(nint**)Pointer)[slot];
 
@@ -26,7 +26,7 @@ internal sealed unsafe class MapiObject : IDisposable
 internal sealed unsafe class MapiRuntime : IDisposable
 {
     public MapiRuntime() => Mapi.Check(Native.MAPIInitialize(0),
-        "MAPIInitialize (verifica Outlook classico, client MAPI predefinito e architettura x86/x64)");
+        "MAPIInitialize (check classic Outlook, the default MAPI client, and x86/x64 architecture)");
 
     public MapiObject Logon(string? profile, nint owner = 0)
     {
@@ -39,7 +39,7 @@ internal sealed unsafe class MapiRuntime : IDisposable
         {
             var result = Native.MAPILogonEx((nuint)owner, name, null, flags, &session);
             if (result == unchecked((int)0x80040113)) throw new OperationCanceledException(); // MAPI_E_USER_CANCEL
-            Mapi.Check(result, "MAPILogonEx (verifica il profilo e l'accesso in Outlook classico)");
+            Mapi.Check(result, "MAPILogonEx (check the profile and access in classic Outlook)");
         }
 
         return new MapiObject(session);
@@ -78,7 +78,8 @@ internal static unsafe class Mapi
     internal const string NoStoresMessage = "No mailbox stores found. Verify that classic Outlook opens a mailbox with this profile, then try again.";
     private const int QueryBatchSize = 512;
     private const uint EntryId = 0x0FFF0102, DisplayName = 0x3001001F, DeliveryTime = 0x0E060040,
-        MessageClass = 0x001A001F, IpmSubtree = 0x35E00102, IpmWastebasket = 0x35E30102, FolderType = 0x36010003;
+        MessageClass = 0x001A001F, IpmSubtree = 0x35E00102, IpmWastebasket = 0x35E30102, FolderType = 0x36010003,
+        MessageSize = 0x0E080003, Subject = 0x0037001F;
     private const uint MapiModify = 1, MapiFolder = 3, FolderGeneric = 1;
     private const uint DisplayNameAnsi = 0x3001001E, DefaultProfile = 0x3D04000B;
 
@@ -89,7 +90,7 @@ internal static unsafe class Mapi
     private const int InvalidEntryId = unchecked((int)0x80040107);
     private const int GetProfileTable = 4, GetMsgStoresTable = 4, OpenMsgStore = 5, GetProps = 5,
         GetContentsTable = 14, GetHierarchyTable = 15, CopyMessages = 20, DeleteMessages = 21,
-        SetColumns = 7, Restrict = 14, QueryRows = 19;
+        SetColumns = 7, GetRowCount = 9, Restrict = 14, QueryRows = 19;
 
     internal record NamedEntry(string Name, byte[] Id);
     internal sealed record Profile(string Name, bool IsDefault);
@@ -159,7 +160,7 @@ internal static unsafe class Mapi
         {
             for (var i = 0; i < segments.Length; i++)
             {
-                var child = FindUnique(GetChildren(folder, cancellation), segments[i], "Cartella", "Usa folders sulla cartella padre.");
+                var child = FindUnique(GetChildren(folder, cancellation), segments[i], "Folder", "Run folders on the parent folder.");
                 var next = OpenChildFolder(store, folder, child.Id, write && i == segments.Length - 1);
                 folder.Dispose();
                 folder = next;
@@ -178,13 +179,16 @@ internal static unsafe class Mapi
     internal static MapiObject OpenMailRoot(MapiObject store, bool write = false) =>
         OpenFolder(store, ReadBinaryProperty(store, IpmSubtree, "PR_IPM_SUBTREE_ENTRYID"), write);
 
-    internal static byte[] GetFolderEntryId(MapiObject folder) => ReadBinaryProperty(folder, EntryId, "PR_ENTRYID della cartella sorgente");
+    internal static byte[] GetFolderEntryId(MapiObject folder) => ReadBinaryProperty(folder, EntryId, "PR_ENTRYID (source folder)");
 
     internal static void EnsureNormalFolder(MapiObject folder)
     {
-        if (ReadProperty(folder, FolderType, "PR_FOLDER_TYPE", p => p->Value.Number) != FolderGeneric)
-            throw new InvalidOperationException("Il percorso non identifica una cartella normale (escluse le cartelle di ricerca).");
+        if (!IsNormalFolder(folder))
+            throw new InvalidOperationException("The path does not identify a normal folder. Search folders are excluded.");
     }
+
+    internal static bool IsNormalFolder(MapiObject folder) =>
+        ReadProperty(folder, FolderType, "PR_FOLDER_TYPE", p => p->Value.Number) == FolderGeneric;
 
     internal static List<NamedEntry> GetChildren(MapiObject folder, CancellationToken cancellation)
     {
@@ -198,23 +202,75 @@ internal static unsafe class Mapi
         foreach (var entry in entries)
         {
             if (!entry.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) continue;
-            if (match is not null) throw new InvalidOperationException($"{kind} ambiguo: {name}. Nessuna selezione automatica.");
+            if (match is not null) throw new InvalidOperationException($"Ambiguous {kind}: {name}. No automatic selection was made.");
             match = entry;
         }
 
-        return match ?? throw new InvalidOperationException($"{kind} non trovato: {name}. {hint}");
+        return match ?? throw new InvalidOperationException($"{kind} not found: {name}. {hint}");
     }
 
     internal static string FormatReportRow(long received, byte[] id) => $"{DateTime.FromFileTimeUtc(received):O}\t{Convert.ToHexString(id)}";
 
     internal static long Scan(MapiObject folder, long? from, long before, Action<long, byte[]>? record,
-        CancellationToken cancellation, Action<long>? reportProgress)
+        CancellationToken cancellation, Action<long>? reportProgress) =>
+        ScanContents(folder, from, before, false, false, record is null ? null : (received, id, _, _) => record(received, id),
+            cancellation, reportProgress, null);
+
+    internal static long ScanPreview(MapiObject folder, long? from, long? before, bool includeSize, Action<long, byte[], uint?, string> record,
+        CancellationToken cancellation, Action<long> reportProgress, Action<long, uint?>? reportRows) =>
+        ScanContents(folder, from, before, includeSize, true, record, cancellation, reportProgress, reportRows);
+
+    private static long ScanContents(MapiObject folder, long? from, long? before, bool includeSize, bool includeSubject,
+        Action<long, byte[], uint?, string>? record,
+        CancellationToken cancellation, Action<long>? reportProgress, Action<long, uint?>? reportRows)
     {
         cancellation.ThrowIfCancellationRequested();
-        var needsId = record is not null;
         using var table = OpenFolderTable(folder, GetContentsTable, "IMAPIFolder::GetContentsTable");
-        SelectColumns(table, needsId ? [DeliveryTime, MessageClass, EntryId] : [DeliveryTime, MessageClass]);
+        ReadOnlySpan<uint> columns = includeSubject
+            ? includeSize ? [DeliveryTime, MessageClass, EntryId, Subject, MessageSize] : [DeliveryTime, MessageClass, EntryId, Subject]
+            : record is not null ? [DeliveryTime, MessageClass, EntryId] : [DeliveryTime, MessageClass];
+        var columnCount = (uint)columns.Length;
+        SelectColumns(table, columns);
+        if (before is { } end) RestrictDates(table, from, end);
 
+        uint? totalRows = reportRows is null ? null : TryGetRowCount(table);
+        long count = 0, examined = 0;
+        reportRows?.Invoke(examined, totalRows);
+        ReadRows(table, row =>
+        {
+            examined++;
+            var properties = GetRowProperties(row, columnCount);
+            var received = 0L;
+            if (!IsMissing(properties[0], DeliveryTime))
+            {
+                RequireTag(properties[0], DeliveryTime, "PR_MESSAGE_DELIVERY_TIME");
+                received = properties[0].Value.FileTime;
+            }
+            if (before is { } end && (received <= 0 || received >= end || received < from)) return;
+            var type = ReadText(properties[1], MessageClass, "PR_MESSAGE_CLASS_W");
+            if (!type.Equals("IPM.Note", StringComparison.OrdinalIgnoreCase) &&
+                !type.StartsWith("IPM.Note.", StringComparison.OrdinalIgnoreCase)) return;
+
+            uint? size = null;
+            if (includeSize && !IsMissing(properties[4], MessageSize))
+            {
+                RequireTag(properties[4], MessageSize, "PR_MESSAGE_SIZE");
+                size = unchecked((uint)properties[4].Value.Number);
+            }
+            var subject = includeSubject && !IsMissing(properties[3], Subject)
+                ? ReadText(properties[3], Subject, "PR_SUBJECT_W").ToString() : "";
+            record?.Invoke(received, ReadBinary(properties[2], EntryId, "PR_ENTRYID"), size, subject);
+            count++;
+        }, cancellation, reportProgress is null && reportRows is null ? null : () =>
+        {
+            reportProgress?.Invoke(count);
+            reportRows?.Invoke(examined, totalRows);
+        });
+        return count;
+    }
+
+    private static void RestrictDates(MapiObject table, long? from, long before)
+    {
         var upper = new Prop { Tag = DeliveryTime, Value = new PropValue { FileTime = before } };
         var lower = new Prop { Tag = DeliveryTime, Value = new PropValue { FileTime = from.GetValueOrDefault() } };
         const uint resAnd = 0, resProperty = 4, relopLessThan = 0, relopGreaterOrEqual = 3;
@@ -224,36 +280,35 @@ internal static unsafe class Mapi
         var conjunction = new Restriction { Type = resAnd, Data = new() { And = new() { Count = 2, Children = bounds } } };
         var restrict = (delegate* unmanaged[Stdcall]<nint, Restriction*, uint, int>)table.Method(Restrict);
         Check(restrict(table.Pointer, from.HasValue ? &conjunction : bounds, 0), "IMAPITable::Restrict (PR_MESSAGE_DELIVERY_TIME)");
-
-        long count = 0;
-        ReadRows(table, row =>
-        {
-            var properties = GetRowProperties(row, needsId ? 3u : 2u);
-            if (properties[0].Tag == 0x0E06000A && properties[0].Value.Number == unchecked((int)0x8004010F)) return;
-            RequireTag(properties[0], DeliveryTime, "PR_MESSAGE_DELIVERY_TIME");
-            var received = properties[0].Value.FileTime;
-            if (received <= 0 || received >= before || received < from) return;
-            var type = ReadText(properties[1], MessageClass, "PR_MESSAGE_CLASS_W");
-            if (!type.Equals("IPM.Note", StringComparison.OrdinalIgnoreCase) &&
-                !type.StartsWith("IPM.Note.", StringComparison.OrdinalIgnoreCase)) return;
-
-            record?.Invoke(received, ReadBinary(properties[2], EntryId, "PR_ENTRYID"));
-
-            count++;
-        }, cancellation, reportProgress is null ? null : () => reportProgress(count));
-        return count;
     }
+
+    private static uint? TryGetRowCount(MapiObject table)
+    {
+        uint count = 0;
+        var getCount = (delegate* unmanaged[Stdcall]<nint, uint, uint*, int>)table.Method(GetRowCount);
+        return getCount(table.Pointer, 0, &count) == 0 ? count : null;
+    }
+
+    private static bool IsMissing(Prop property, uint tag) =>
+        property.Tag == ((tag & 0xFFFF0000) | 0xA) && property.Value.Number == unchecked((int)0x8004010F);
 
     internal static MapiObject OpenTrash(MapiObject store, MapiObject source)
     {
-        var trashId = ReadBinaryProperty(store, IpmWastebasket, "PR_IPM_WASTEBASKET_ENTRYID");
-        var sourceId = GetFolderEntryId(source);
+        var trashId = GetTrashEntryId(store);
+        if (SameEntry(store, GetFolderEntryId(source), trashId))
+            throw new InvalidOperationException("The source is already Deleted Items. No messages will be moved.");
+        return OpenFolder(store, trashId, true);
+    }
+
+    internal static byte[] GetTrashEntryId(MapiObject store) => ReadBinaryProperty(store, IpmWastebasket, "PR_IPM_WASTEBASKET_ENTRYID");
+
+    internal static bool SameEntry(MapiObject store, byte[] first, byte[] second)
+    {
         uint same = 0;
         var compare = (delegate* unmanaged[Stdcall]<nint, uint, byte*, uint, byte*, uint, uint*, int>)store.Method(StoreCompareEntryIds);
-        fixed (byte* s = sourceId, t = trashId)
-            Check(compare(store.Pointer, (uint)sourceId.Length, s, (uint)trashId.Length, t, 0, &same), "IMsgStore::CompareEntryIDs");
-        if (same != 0) throw new InvalidOperationException("L'origine e' gia' Posta eliminata. Nessun messaggio verra' spostato.");
-        return OpenFolder(store, trashId, true);
+        fixed (byte* s = first, t = second)
+            Check(compare(store.Pointer, (uint)first.Length, s, (uint)second.Length, t, 0, &same), "IMsgStore::CompareEntryIDs");
+        return same != 0;
     }
 
     internal static void Move(MapiObject source, MapiObject destination, ReadOnlySpan<byte[]> ids, Action? onSubmit = null) =>
@@ -331,7 +386,7 @@ internal static unsafe class Mapi
         var result = new MapiObject(folder);
         if (type == MapiFolder) return result;
         result.Dispose();
-        throw new InvalidOperationException("L'EntryID non identifica una cartella MAPI.");
+        throw new InvalidOperationException("The EntryID does not identify a MAPI folder.");
     }
 
     private static MapiObject OpenFolderTable(MapiObject folder, int method, string operation)
@@ -381,7 +436,7 @@ internal static unsafe class Mapi
             try
             {
                 Check(result, "IMAPITable::QueryRows");
-                if (batch == null) throw new InvalidOperationException("QueryRows non ha restituito un SRowSet.");
+                if (batch == null) throw new InvalidOperationException("QueryRows did not return an SRowSet.");
                 if (batch->Count == 0) return;
                 var rows = &batch->First;
                 for (var i = 0; i < batch->Count; i++) read(rows + i);
@@ -402,7 +457,7 @@ internal static unsafe class Mapi
     }
 
     private static Prop* GetRowProperties(Row* row, uint expected) => row->Count == expected && row->Properties != null
-        ? row->Properties : throw new InvalidOperationException("MAPI ha restituito una riga con colonne inattese.");
+        ? row->Properties : throw new InvalidOperationException("MAPI returned a row with unexpected columns.");
 
     private delegate T ConvertProp<T>(Prop* property);
 
@@ -416,7 +471,7 @@ internal static unsafe class Mapi
         try
         {
             if (result < 0) Check(result, label);
-            if (count != 1 || props == null) throw new InvalidOperationException($"{label}: proprieta' non restituita.");
+            if (count != 1 || props == null) throw new InvalidOperationException($"{label}: property not returned.");
             RequireTag(*props, tag, label);
             Check(result, label);
             return convert(props);
@@ -434,14 +489,14 @@ internal static unsafe class Mapi
     {
         RequireTag(property, tag, label);
         var binary = property.Value.Binary;
-        if (binary.Count == 0 || binary.Data == null) throw new InvalidOperationException($"{label}: valore vuoto.");
+        if (binary.Count == 0 || binary.Data == null) throw new InvalidOperationException($"{label}: empty value.");
         return new ReadOnlySpan<byte>(binary.Data, checked((int)binary.Count)).ToArray();
     }
 
     private static ReadOnlySpan<char> ReadText(Prop property, uint tag, string label)
     {
         RequireTag(property, tag, label);
-        if (property.Value.Text == null) throw new InvalidOperationException($"{label}: valore nullo.");
+        if (property.Value.Text == null) throw new InvalidOperationException($"{label}: null value.");
         return MemoryMarshal.CreateReadOnlySpanFromNullTerminated(property.Value.Text);
     }
 
@@ -449,14 +504,14 @@ internal static unsafe class Mapi
     {
         RequireTag(property, DisplayNameAnsi, "PR_DISPLAY_NAME_A");
         var name = Marshal.PtrToStringAnsi(property.Value.Pointer);
-        return !string.IsNullOrEmpty(name) ? name : throw new InvalidOperationException("PR_DISPLAY_NAME_A: valore vuoto.");
+        return !string.IsNullOrEmpty(name) ? name : throw new InvalidOperationException("PR_DISPLAY_NAME_A: empty value.");
     }
 
     private static void RequireTag(Prop property, uint tag, string label)
     {
         if (property.Tag == tag) return;
         if ((property.Tag & 0xFFFF) == 0xA) throw new MapiException(label, property.Value.Number); // PT_ERROR
-        throw new InvalidOperationException($"{label}: tag imprevisto 0x{property.Tag:X8}.");
+        throw new InvalidOperationException($"{label}: unexpected tag 0x{property.Tag:X8}.");
     }
 
     [StructLayout(LayoutKind.Sequential)] private struct Binary { public uint Count; public byte* Data; }

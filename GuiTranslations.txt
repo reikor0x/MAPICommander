@@ -1,0 +1,88 @@
+en|it|fr|de|es
+MAPICommander - Exchange Mailbox|MAPICommander - Casella Exchange|MAPICommander - Boîte Exchange|MAPICommander - Exchange-Postfach|MAPICommander - Buzón de Exchange
+Options|Opzioni|Options|Optionen|Opciones
+Language|Lingua|Langue|Sprache|Idioma
+Version {0}|Versione {0}|Version {0}|Version {0}|Versión {0}
+Outlook profile:|Profilo Outlook:|Profil Outlook :|Outlook-Profil:|Perfil de Outlook:
+Received from (UTC):|Ricevuti dal (UTC):|Reçus à partir du (UTC) :|Empfangen ab (UTC):|Recibidos desde (UTC):
+Through (inclusive):|Fino al (incluso):|Jusqu'au (inclus) :|Bis einschließlich:|Hasta (inclusive):
+Refresh profiles|Aggiorna profili|Actualiser les profils|Profile aktualisieren|Actualizar perfiles
+Online mode no cache|Modalità online senza cache|Mode en ligne sans cache|Online-Modus ohne Cache|Modo en línea sin caché
+Log on|Accedi|Se connecter|Anmelden|Iniciar sesión
+Filter by date|Filtra per data|Filtrer par date|Nach Datum filtern|Filtrar por fecha
+Entire mailbox|Intera casella|Boîte entière|Gesamtes Postfach|Todo el buzón
+Include subfolders|Includi sottocartelle|Inclure les sous-dossiers|Unterordner einbeziehen|Incluir subcarpetas
+No folder selected|Nessuna cartella selezionata|Aucun dossier sélectionné|Kein Ordner ausgewählt|Ninguna carpeta seleccionada
+Mailbox: {0}|Casella: {0}|Boîte : {0}|Postfach: {0}|Buzón: {0}
+Folder: {0}|Cartella: {0}|Dossier : {0}|Ordner: {0}|Carpeta: {0}
+Folder and subfolders: {0}|Cartella e sottocartelle: {0}|Dossier et sous-dossiers : {0}|Ordner und Unterordner: {0}|Carpeta y subcarpetas: {0}
+Largest first|Prima i più grandi|Les plus volumineux d'abord|Größte zuerst|Más grandes primero
+Preview|Anteprima|Aperçu|Vorschau|Vista previa
+Export TSV|Esporta TSV|Exporter en TSV|TSV exportieren|Exportar TSV
+Move to Deleted Items|Sposta in Posta eliminata|Déplacer vers Éléments supprimés|In Gelöschte Elemente verschieben|Mover a Elementos eliminados
+Hard delete...|Elimina definitivamente...|Supprimer définitivement...|Endgültig löschen...|Eliminar definitivamente...
+Cancel operation|Annulla operazione|Annuler l'opération|Vorgang abbrechen|Cancelar operación
+Outlook profile|Profilo Outlook|Profil Outlook|Outlook-Profil|Perfil de Outlook
+Received from UTC (optional)|Ricevuti dal (UTC, facoltativo)|Reçus à partir du (UTC, facultatif)|Empfangen ab (UTC, optional)|Recibidos desde (UTC, opcional)
+Received through UTC|Ricevuti fino al (UTC)|Reçus jusqu'au (UTC)|Empfangen bis (UTC)|Recibidos hasta (UTC)
+Stores and folders|Archivi e cartelle|Magasins et dossiers|Speicher und Ordner|Almacenes y carpetas
+Preview results|Risultati dell'anteprima|Résultats de l'aperçu|Vorschauergebnisse|Resultados de la vista previa
+Operation progress|Avanzamento operazione|Progression de l'opération|Fortschritt des Vorgangs|Progreso de la operación
+Working...|Elaborazione...|Traitement en cours...|Wird verarbeitet...|Procesando...
+Subject|Oggetto|Objet|Betreff|Asunto
+Received (UTC)|Ricezione (UTC)|Réception (UTC)|Empfangen (UTC)|Recepción (UTC)
+Size|Dimensione|Taille|Größe|Tamaño
+Folder|Cartella|Dossier|Ordner|Carpeta
+EntryID (hex)|EntryID (esadecimale)|EntryID (hex.)|EntryID (hex.)|EntryID (hex.)
+{0:N0} B|{0:N0} B|{0:N0} o|{0:N0} B|{0:N0} B
+Select a classic Outlook profile to browse stores and folders.|Seleziona un profilo di Outlook classico per esplorare archivi e cartelle.|Sélectionnez un profil Outlook classique pour parcourir les magasins et dossiers.|Wählen Sie ein klassisches Outlook-Profil aus, um Speicher und Ordner zu durchsuchen.|Selecciona un perfil de Outlook clásico para explorar almacenes y carpetas.
+Click Log on to browse the selected Outlook profile.|Fai clic su Accedi per esplorare il profilo selezionato.|Cliquez sur Se connecter pour parcourir le profil sélectionné.|Klicken Sie auf Anmelden, um das ausgewählte Profil zu durchsuchen.|Haz clic en Iniciar sesión para explorar el perfil seleccionado.
+Reading folders|Lettura cartelle|Lecture des dossiers|Ordner werden gelesen|Leyendo carpetas
+Subfolders in {1}: {0:N0}.|Sottocartelle in {1}: {0:N0}.|Sous-dossiers dans {1} : {0:N0}.|Unterordner in {1}: {0:N0}.|Subcarpetas en {1}: {0:N0}.
+The language preference could not be read or saved.|Non è stato possibile leggere o salvare la lingua preferita.|Impossible de lire ou d'enregistrer la langue choisie.|Die Spracheinstellung konnte nicht gelesen oder gespeichert werden.|No se pudo leer o guardar la preferencia de idioma.
+Reading Outlook profiles|Lettura dei profili Outlook|Lecture des profils Outlook|Outlook-Profile werden gelesen|Leyendo perfiles de Outlook
+No Outlook profiles found. Open classic Outlook as this Windows user, then select Refresh profiles.|Nessun profilo Outlook trovato. Apri Outlook classico con questo utente Windows, poi seleziona Aggiorna profili.|Aucun profil trouvé. Ouvrez Outlook classique avec ce compte Windows, puis actualisez les profils.|Keine Outlook-Profile gefunden. Öffnen Sie das klassische Outlook mit diesem Windows-Konto und aktualisieren Sie die Profile.|No se encontraron perfiles. Abre Outlook clásico con este usuario de Windows y actualiza los perfiles.
+Select an Outlook profile and click Log on.|Seleziona un profilo Outlook e fai clic su Accedi.|Sélectionnez un profil Outlook et cliquez sur Se connecter.|Wählen Sie ein Outlook-Profil aus und klicken Sie auf Anmelden.|Selecciona un perfil de Outlook y haz clic en Iniciar sesión.
+Logging on|Accesso in corso|Connexion en cours|Anmeldung läuft|Iniciando sesión
+No mailbox stores found. Verify that classic Outlook opens a mailbox with this profile, then try again.|Nessun archivio trovato. Verifica che Outlook classico apra una casella con questo profilo, poi riprova.|Aucun magasin trouvé. Vérifiez qu'Outlook classique ouvre une boîte avec ce profil, puis réessayez.|Kein Postfachspeicher gefunden. Prüfen Sie, ob das klassische Outlook mit diesem Profil ein Postfach öffnet, und versuchen Sie es erneut.|No se encontraron almacenes. Comprueba que Outlook clásico abre un buzón con este perfil y vuelve a intentarlo.
+Expand a store and select a mail folder.|Espandi un archivio e seleziona una cartella di posta.|Développez un magasin et sélectionnez un dossier de courrier.|Erweitern Sie einen Speicher und wählen Sie einen E-Mail-Ordner aus.|Expande un almacén y selecciona una carpeta de correo.
+The start date cannot be after the final date.|La data iniziale non può essere successiva alla data finale.|La date de début ne peut pas être postérieure à la date de fin.|Das Startdatum darf nicht nach dem Enddatum liegen.|La fecha de inicio no puede ser posterior a la fecha final.
+Search|Cerca|Rechercher|Suchen|Buscar
+Cancel|Annulla|Annuler|Abbrechen|Cancelar
+Entire mailbox search|Ricerca nell'intera casella|Recherche dans toute la boîte|Suche im gesamten Postfach|Buscar en todo el buzón
+Search all mail folders in '{0}'?|Cercare in tutte le cartelle di posta di «{0}»?|Rechercher dans tous les dossiers de courrier de « {0} » ?|Alle E-Mail-Ordner in „{0}“ durchsuchen?|¿Buscar en todas las carpetas de correo de «{0}»?
+This can take a long time, especially for large or online mailboxes. No messages will be changed.|L'operazione può richiedere molto tempo, soprattutto per caselle grandi o in modalità online. Nessun messaggio verrà modificato.|Cela peut prendre du temps, surtout pour les grandes boîtes ou en mode en ligne. Aucun message ne sera modifié.|Das kann lange dauern, besonders bei großen Postfächern oder im Online-Modus. Es werden keine Nachrichten geändert.|Esto puede llevar mucho tiempo, sobre todo con buzones grandes o en modo en línea. No se modificará ningún mensaje.
+Searching|Ricerca in corso|Recherche en cours|Suche läuft|Buscando
+Search ended: {0:N0} matching messages. No changes made.|Ricerca terminata: {0:N0} messaggi corrispondenti. Nessuna modifica.|Recherche terminée : {0:N0} messages correspondants. Aucune modification.|Suche abgeschlossen: {0:N0} passende Nachrichten. Keine Änderungen.|Búsqueda finalizada: {0:N0} mensajes coincidentes. No se hicieron cambios.
+Tab-separated report (*.tsv)|Report con separazione tramite tabulazioni (*.tsv)|Rapport séparé par des tabulations (*.tsv)|Tabulatorgetrennter Bericht (*.tsv)|Informe separado por tabulaciones (*.tsv)
+Exporting|Esportazione in corso|Exportation en cours|Export läuft|Exportando
+Exported {0:N0} messages.|Messaggi esportati: {0:N0}.|Messages exportés : {0:N0}.|Exportierte Nachrichten: {0:N0}.|Mensajes exportados: {0:N0}.
+The output file may be incomplete.|Il file di output potrebbe essere incompleto.|Le fichier de sortie peut être incomplet.|Die Ausgabedatei ist möglicherweise unvollständig.|El archivo de salida puede estar incompleto.
+All previewed messages ({0:N0})|Tutti i messaggi in anteprima ({0:N0})|Tous les messages de l'aperçu ({0:N0})|Alle Nachrichten in der Vorschau ({0:N0})|Todos los mensajes de la vista previa ({0:N0})
+Only highlighted messages ({0:N0})|Solo i messaggi evidenziati ({0:N0})|Messages sélectionnés uniquement ({0:N0})|Nur markierte Nachrichten ({0:N0})|Solo los mensajes seleccionados ({0:N0})
+Confirm hard delete|Conferma eliminazione definitiva|Confirmer la suppression définitive|Endgültiges Löschen bestätigen|Confirmar eliminación definitiva
+Confirm move to Deleted Items|Conferma spostamento in Posta eliminata|Confirmer le déplacement vers Éléments supprimés|Verschieben in Gelöschte Elemente bestätigen|Confirmar el traslado a Elementos eliminados
+Which previewed messages do you want to remove?|Quali messaggi dell'anteprima vuoi rimuovere?|Quels messages de l'aperçu voulez-vous retirer ?|Welche Nachrichten aus der Vorschau möchten Sie entfernen?|¿Qué mensajes de la vista previa quieres quitar?
+Hard delete bypasses Deleted Items. Recovery may not be possible.|L'eliminazione definitiva non passa da Posta eliminata. Il recupero potrebbe non essere possibile.|La suppression définitive ne passe pas par Éléments supprimés. La récupération peut être impossible.|Endgültig gelöschte Nachrichten werden nicht in Gelöschte Elemente verschoben und sind möglicherweise nicht wiederherstellbar.|La eliminación definitiva omite Elementos eliminados. Es posible que no se puedan recuperar los mensajes.
+The chosen messages will be moved to Deleted Items.|I messaggi scelti saranno spostati in Posta eliminata.|Les messages choisis seront déplacés vers Éléments supprimés.|Die ausgewählten Nachrichten werden in Gelöschte Elemente verschoben.|Los mensajes elegidos se moverán a Elementos eliminados.
+Hard deleting|Eliminazione definitiva in corso|Suppression définitive en cours|Endgültiges Löschen läuft|Eliminando definitivamente
+Moving|Spostamento in corso|Déplacement en cours|Verschieben läuft|Moviendo
+Permanently deleted: {0:N0}.|Eliminati definitivamente: {0:N0}.|Supprimés définitivement : {0:N0}.|Endgültig gelöscht: {0:N0}.|Eliminados definitivamente: {0:N0}.
+Moved to Deleted Items: {0:N0}.|Spostati in Posta eliminata: {0:N0}.|Déplacés vers Éléments supprimés : {0:N0}.|In Gelöschte Elemente verschoben: {0:N0}.|Movidos a Elementos eliminados: {0:N0}.
+No removal batch was submitted. Run Preview again before retrying.|Nessun batch di rimozione è stato inviato. Esegui di nuovo l'anteprima prima di riprovare.|Aucun lot n'a été envoyé. Relancez l'aperçu avant de réessayer.|Es wurde kein Lösch- oder Verschiebestapel übermittelt. Starten Sie vor einem erneuten Versuch die Vorschau.|No se envió ningún lote. Vuelve a ejecutar la vista previa antes de reintentar.
+Messages confirmed: {0:N0}. An unconfirmed batch may have changed the mailbox. Run Preview again before retrying.|Messaggi confermati: {0:N0}. Un batch non confermato potrebbe aver modificato la casella. Esegui di nuovo l'anteprima prima di riprovare.|Messages confirmés : {0:N0}. Un lot non confirmé a pu modifier la boîte. Relancez l'aperçu avant de réessayer.|Bestätigte Nachrichten: {0:N0}. Ein nicht bestätigter Stapel hat das Postfach möglicherweise geändert. Starten Sie vor einem erneuten Versuch die Vorschau.|Mensajes confirmados: {0:N0}. Un lote sin confirmar puede haber cambiado el buzón. Vuelve a ejecutar la vista previa antes de reintentar.
+{0}: {1:N0} / {2:N0} confirmed|{0}: {1:N0} / {2:N0} confermati|{0} : {1:N0} / {2:N0} confirmés|{0}: {1:N0} / {2:N0} bestätigt|{0}: {1:N0} / {2:N0} confirmados
+{0}: {1:N0} matches|{0}: {1:N0} risultati|{0} : {1:N0} résultats|{0}: {1:N0} Treffer|{0}: {1:N0} coincidencias
+{0}...|{0}...|{0}...|{0}...|{0}...
+{0}: cancelled. {1}|{0}: operazione annullata. {1}|{0} : opération annulée. {1}|{0}: Vorgang abgebrochen. {1}|{0}: operación cancelada. {1}
+{0}: failed. {1}|{0}: operazione non riuscita. {1}|{0} : échec de l'opération. {1}|{0}: Vorgang fehlgeschlagen. {1}|{0}: error en la operación. {1}
+{0}: failed|{0}: operazione non riuscita|{0} : échec de l'opération|{0}: Vorgang fehlgeschlagen|{0}: error en la operación
+Cancelling after the current operation returns...|Annullamento al termine dell'operazione in corso...|Annulation après la fin de l'opération en cours...|Abbruch nach Abschluss des laufenden Vorgangs...|Cancelando cuando termine la operación en curso...
+Preview cleared. Run Preview for the current selection.|Anteprima azzerata. Avvia l'anteprima per la selezione corrente.|Aperçu effacé. Relancez l'aperçu pour la sélection actuelle.|Vorschau geleert. Starten Sie die Vorschau für die aktuelle Auswahl.|Vista previa borrada. Ejecuta la vista previa para la selección actual.
+The selected target does not match the search scope.|La selezione non corrisponde all'ambito della ricerca.|La sélection ne correspond pas au périmètre de recherche.|Die Auswahl entspricht nicht dem Suchbereich.|La selección no coincide con el ámbito de búsqueda.
+The preview is no longer current. Run Preview again before removing messages.|L'anteprima non è più valida. Eseguila di nuovo prima di rimuovere messaggi.|L'aperçu n'est plus à jour. Relancez-le avant de retirer des messages.|Die Vorschau ist nicht mehr aktuell. Starten Sie sie erneut, bevor Sie Nachrichten entfernen.|La vista previa ya no está actualizada. Ejecútala de nuevo antes de quitar mensajes.
+The removal selection includes messages already in Deleted Items. Select only messages from other folders to move them.|La selezione include messaggi già in Posta eliminata. Per spostarli, seleziona solo messaggi di altre cartelle.|La sélection contient des messages déjà dans Éléments supprimés. Sélectionnez uniquement des messages d'autres dossiers pour les déplacer.|Die Auswahl enthält Nachrichten, die bereits in Gelöschte Elemente liegen. Wählen Sie zum Verschieben nur Nachrichten aus anderen Ordnern aus.|La selección incluye mensajes que ya están en Elementos eliminados. Para moverlos, selecciona solo mensajes de otras carpetas.
+Connect to an Outlook profile first.|Accedi prima a un profilo Outlook.|Connectez-vous d'abord à un profil Outlook.|Melden Sie sich zuerst bei einem Outlook-Profil an.|Conéctate primero a un perfil de Outlook.
+Folder has no parent in the current mailbox tree.|La cartella non ha una cartella padre nell'albero della casella corrente.|Le dossier n'a pas de parent dans l'arborescence actuelle.|Der Ordner hat in der aktuellen Postfachstruktur keinen übergeordneten Ordner.|La carpeta no tiene un elemento principal en el árbol del buzón actual.
+The path does not identify a normal folder. Search folders are excluded.|Il percorso non identifica una cartella normale. Le cartelle di ricerca sono escluse.|Le chemin ne désigne pas un dossier normal. Les dossiers de recherche sont exclus.|Der Pfad verweist nicht auf einen normalen Ordner. Suchordner sind ausgeschlossen.|La ruta no identifica una carpeta normal. Se excluyen las carpetas de búsqueda.
+The EntryID does not identify a MAPI folder.|L'EntryID non identifica una cartella MAPI.|L'EntryID ne désigne pas un dossier MAPI.|Die EntryID verweist nicht auf einen MAPI-Ordner.|El EntryID no identifica una carpeta MAPI.
