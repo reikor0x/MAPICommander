@@ -80,8 +80,10 @@ internal static unsafe class Mapi
     private const uint DisplayNameAnsi = 0x3001001E, DefaultProfile = 0x3D04000B;
 
     // Vtable slots follow Microsoft's MAPIX.h and MAPIDefS.h, including inherited methods.
-    private const int GetProfileTable = 4, GetMsgStoresTable = 4, OpenMsgStore = 5, GetProps = 5, StoreCompareEntryIds = 15,
-        StoreOpenEntry = 16, GetContentsTable = 14, GetHierarchyTable = 15, CopyMessages = 20, DeleteMessages = 21,
+    private const int MsgStoreFirstSlot = 3 + 11; // IUnknown + IMAPIProp; IMsgStore starts with Advise and Unadvise.
+    private const int StoreCompareEntryIds = MsgStoreFirstSlot + 2, StoreOpenEntry = MsgStoreFirstSlot + 3;
+    private const int GetProfileTable = 4, GetMsgStoresTable = 4, OpenMsgStore = 5, GetProps = 5,
+        GetContentsTable = 14, GetHierarchyTable = 15, CopyMessages = 20, DeleteMessages = 21,
         SetColumns = 7, Restrict = 14, QueryRows = 19;
 
     internal record NamedEntry(string Name, byte[] Id);
