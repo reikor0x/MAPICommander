@@ -15,6 +15,10 @@ Download the self-contained Windows executable from [GitHub Releases](https://gi
 
 ## Desktop interface
 
+![MAPICommander desktop interface showing a selected folder and message preview](screenshot.png)
+
+*Example screenshot with sample messages and the Italian interface.*
+
 Open the executable without arguments (or pass `--gui`). Select a profile from the **Outlook profile** drop-down and click **Log on**. The list contains the classic Outlook profiles available to the current Windows user. If it is empty, open classic Outlook under the same Windows user and configure a profile, then click **Refresh profiles**. Check **Online mode no cache** before logging on if you want to request server access rather than use the Outlook cache.
 
 The current version is displayed at the top right. Under **Options → Language**, choose English (the default), Italian, French, German, or Spanish. The interface updates immediately and remembers your choice for your Windows user. The command line and MAPI diagnostic identifiers remain in English; Windows and Outlook may use their own language in system dialogs.
