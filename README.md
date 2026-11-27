@@ -1,6 +1,6 @@
-# MAPICommander 0.6.1 Beta
+# MAPICommander 0.7 Beta
 
-MAPICommander is a Windows command-line tool for counting, listing, and removing email from a single Exchange mailbox folder. It uses the existing classic Outlook profile through Extended MAPI, not EWS, and does not require an Entra app registration.
+MAPICommander is a Windows tool for counting, listing, and removing email from a single Exchange mailbox folder. The same executable provides a desktop mailbox browser and a command-line interface. Both use the existing classic Outlook profile through Extended MAPI, not EWS, and do not require an Entra app registration.
 
 > **Beta software.** MAPICommander is provided **as is**, without warranty of any kind, express or implied. There is no guarantee that it will work correctly or that it is suitable for your environment. Test it on a disposable folder and review a read-only preview before deleting anything. Hard-deleted messages may not be recoverable.
 
@@ -11,7 +11,18 @@ Download the self-contained Windows executable from [GitHub Releases](https://gi
 - **Classic Outlook for Windows** with a working Exchange profile. The new Outlook is not supported. Run the tool in the Windows session that owns the profile.
 - For a delegated or shared mailbox, grant the Outlook user the appropriate Exchange permissions (typically Full Access) and ensure the mailbox appears as a separate store in the selected profile. Use Outlook automapping or add the mailbox to the profile. Opening an unmounted mailbox by SMTP address is not supported.
 
-## Quick start
+## Desktop interface
+
+Open the executable without arguments (or pass `--gui`). Select **Log on** with a named profile, or leave the name blank to open the Outlook profile chooser. Check **Online** before logging on if you want to request server access rather than use the Outlook cache.
+
+1. Expand a mailbox store in the tree and select a folder.
+2. Set the inclusive final date and, optionally, an inclusive start date. Dates are in UTC.
+3. Select **Preview** to scan in read-only mode. The list shows only received time and EntryID; **Export TSV** saves the report.
+4. If you want to remove the previewed messages, select **Move to Deleted Items** or **Hard delete** and confirm. Changing the folder or dates clears the preview. The desktop interface uses the IDs from that preview and does not include new matches that appeared after it.
+
+The status bar shows scan and deletion progress. Cancellation is checked between MAPI batches and cannot undo a completed batch.
+
+## Command-line quick start
 
 The examples use PowerShell. Adjust the filename to match the executable you downloaded and use the store and folder names shown by your Outlook profile.
 
@@ -70,6 +81,6 @@ dotnet publish -c Release -r win-x64
 dotnet publish -c Release -r win-x86
 ```
 
-Each build produces a single `MAPICommander.exe` under `bin\Release\net10.0\<runtime>\publish`. Distribute the executable from the **publish** directory, not the regular build output. The embedded runtime may extract native components to a temporary location at startup.
+Each publish produces a single `MAPICommander.exe` under `bin\Release\net10.0-windows\<runtime>\publish`. Distribute the executable from the **publish** directory, not the regular build output. The embedded runtime may extract native components to a temporary location at startup.
 
 The implementation applies the date filter with `IMAPITable::Restrict`, reads up to 512 rows at a time without opening individual messages, and moves or deletes in batches of up to 256. Measure performance against your mailbox; a speed advantage over EWS is not guaranteed. Extended MAPI does not have an official Microsoft .NET wrapper. The native calls are based on the patterns in [MFCMAPI](https://github.com/microsoft/mfcmapi) and the headers in [Microsoft's MAPI Stub Library](https://github.com/microsoft/MAPIStubLibrary).

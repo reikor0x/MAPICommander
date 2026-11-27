@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 internal static class Program
 {
     private const string Usage = """
+        MAPICommander [--gui]
         MAPICommander stores [--profile NAME]
         MAPICommander folders [--profile NAME] --store NAME [--folder "Folder\Subfolder"] [--online]
         MAPICommander scan [--profile NAME] --store NAME --folder "Folder\Subfolder"
@@ -22,7 +23,16 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
-        if (args.Length == 0 || args is ["--help" or "-h"])
+        if (args.Length == 0 || args is ["--gui"])
+        {
+            FreeConsole();
+            ApplicationConfiguration.Initialize();
+            using var window = new MailboxForm();
+            Application.Run(window);
+            return 0;
+        }
+
+        if (args is ["--help" or "-h"])
         {
             Console.WriteLine(Usage);
             return 0;
@@ -56,6 +66,10 @@ internal static class Program
             Console.CancelKeyPress -= onCancel;
         }
     }
+
+    [DllImport("kernel32.dll", ExactSpelling = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static extern int FreeConsole();
 
     private static int Run(Options options, CancellationToken cancellation)
     {
@@ -99,7 +113,12 @@ internal static class Program
         using (var progress = new ConsoleProgress(progressOutput, "Scansione", inline: !list || Console.IsOutputRedirected))
         {
             Action<long>? report = progressOutput is null ? null : progress.Report;
-            count = Mapi.Scan(folder, options.From?.ToFileTime(), before.ToFileTime(), list, ids, cancellation, report);
+            Action<long, byte[]>? record = !list && ids is null ? null : (received, id) =>
+            {
+                if (list) Console.WriteLine(Mapi.FormatReportRow(received, id));
+                ids?.Add(id);
+            };
+            count = Mapi.Scan(folder, options.From?.ToFileTime(), before.ToFileTime(), record, cancellation, report);
             progress.Complete(count);
         }
         Console.Error.WriteLine($"Corrispondenze: {count} ({timer.Elapsed.TotalSeconds:F2} s)");

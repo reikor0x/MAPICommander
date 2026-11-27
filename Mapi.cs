@@ -25,7 +25,7 @@ internal sealed unsafe class MapiRuntime : IDisposable
     public MapiRuntime() => Mapi.Check(Native.MAPIInitialize(0),
         "MAPIInitialize (verifica Outlook classico, client MAPI predefinito e architettura x86/x64)");
 
-    public MapiObject Logon(string? profile)
+    public MapiObject Logon(string? profile, nint owner = 0)
     {
         const uint newSession = 0x2, extended = 0x20, noMail = 0x8000;
         const uint logonUi = 0x1, explicitProfile = 0x10;
@@ -34,7 +34,7 @@ internal sealed unsafe class MapiRuntime : IDisposable
         nint session = 0;
         fixed (char* name = profile)
         {
-            var result = Native.MAPILogonEx(0, name, null, flags, &session);
+            var result = Native.MAPILogonEx((nuint)owner, name, null, flags, &session);
             if (result == unchecked((int)0x80040113)) throw new OperationCanceledException(); // MAPI_E_USER_CANCEL
             Mapi.Check(result, "MAPILogonEx (verifica il profilo e l'accesso in Outlook classico)");
         }
@@ -108,17 +108,24 @@ internal static unsafe class Mapi
     internal static MapiObject ResolveFolder(MapiObject store, string? path, bool write, CancellationToken cancellation)
     {
         var segments = path?.Split('\\') ?? [];
-        var id = ReadBinaryProperty(store, IpmSubtree, "PR_IPM_SUBTREE_ENTRYID");
+        var id = GetMailRootId(store);
         foreach (var name in segments)
         {
             using var parent = OpenFolder(store, id, false);
             id = FindUnique(GetChildren(parent, cancellation), name, "Cartella", "Usa folders sulla cartella padre.").Id;
         }
 
+        return segments.Length == 0 ? OpenFolder(store, id, write) : OpenNormalFolder(store, id, write);
+    }
+
+    internal static byte[] GetMailRootId(MapiObject store) => ReadBinaryProperty(store, IpmSubtree, "PR_IPM_SUBTREE_ENTRYID");
+
+    internal static MapiObject OpenNormalFolder(MapiObject store, byte[] id, bool write)
+    {
         var folder = OpenFolder(store, id, write);
         try
         {
-            if (segments.Length != 0 && ReadProperty(folder, FolderType, "PR_FOLDER_TYPE", p => p->Value.Number) != FolderGeneric)
+            if (ReadProperty(folder, FolderType, "PR_FOLDER_TYPE", p => p->Value.Number) != FolderGeneric)
                 throw new InvalidOperationException("Il percorso non identifica una cartella normale (escluse le cartelle di ricerca).");
             return folder;
         }
@@ -148,11 +155,13 @@ internal static unsafe class Mapi
         return match ?? throw new InvalidOperationException($"{kind} non trovato: {name}. {hint}");
     }
 
-    internal static long Scan(MapiObject folder, long? from, long before, bool list, List<byte[]>? mutationIds,
+    internal static string FormatReportRow(long received, byte[] id) => $"{DateTime.FromFileTimeUtc(received):O}\t{Convert.ToHexString(id)}";
+
+    internal static long Scan(MapiObject folder, long? from, long before, Action<long, byte[]>? record,
         CancellationToken cancellation, Action<long>? reportProgress)
     {
         cancellation.ThrowIfCancellationRequested();
-        var needsId = list || mutationIds is not null;
+        var needsId = record is not null;
         using var table = OpenFolderTable(folder, GetContentsTable, "IMAPIFolder::GetContentsTable");
         SelectColumns(table, needsId ? [DeliveryTime, MessageClass, EntryId] : [DeliveryTime, MessageClass]);
 
@@ -178,12 +187,7 @@ internal static unsafe class Mapi
             if (!type.Equals("IPM.Note", StringComparison.OrdinalIgnoreCase) &&
                 !type.StartsWith("IPM.Note.", StringComparison.OrdinalIgnoreCase)) return;
 
-            if (needsId)
-            {
-                var id = ReadBinary(properties[2], EntryId, "PR_ENTRYID");
-                if (list) Console.WriteLine($"{DateTime.FromFileTimeUtc(received):O}\t{Convert.ToHexString(id)}");
-                mutationIds?.Add(id);
-            }
+            record?.Invoke(received, ReadBinary(properties[2], EntryId, "PR_ENTRYID"));
 
             count++;
         }, cancellation, reportProgress is null ? null : () => reportProgress(count));
@@ -242,7 +246,7 @@ internal static unsafe class Mapi
         }
     }
 
-    private static MapiObject OpenFolder(MapiObject store, byte[] entryId, bool write)
+    internal static MapiObject OpenFolder(MapiObject store, byte[] entryId, bool write)
     {
         uint type = 0;
         nint folder = 0;
